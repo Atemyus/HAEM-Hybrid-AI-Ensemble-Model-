@@ -28,14 +28,162 @@ st.set_page_config(
 # Import HAEM modules
 from haem.models.meteorological import NWPModel
 from haem.data.meteociel_fields import FieldSelection, FieldPresets, MeteocielField
-from haem.ai.providers import AIProvider, AIProviderConfig, AIPresets
+from haem.ai.providers import AIProvider, AIProviderConfig, AIPresets, MultiAIOrchestrator
 from haem.config.settings import get_api_keys, get_app_config
+from haem.data.openmeteo import MultiModelOpenMeteoFetcher, OpenMeteoConfig
 
 logger = logging.getLogger(__name__)
 
 # Load API keys
 api_keys = get_api_keys()
 app_config = get_app_config()
+
+
+# ============================================================================
+# DATA FETCHING AND ANALYSIS
+# ============================================================================
+
+async def fetch_weather_data(models: list[NWPModel], forecast_hours: list[int]):
+    """Fetch weather data from Open-Meteo for all selected models."""
+    config = OpenMeteoConfig(
+        latitude_min=35.0,
+        latitude_max=65.0,
+        longitude_min=-15.0,
+        longitude_max=30.0,
+        grid_resolution=1.0,  # Faster with coarser grid
+        forecast_days=7,
+    )
+    fetcher = MultiModelOpenMeteoFetcher(models=models, config=config)
+    return await fetcher.fetch_all_models(forecast_hours=forecast_hours)
+
+
+async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], forecast_hour: int):
+    """Run AI analysis on the weather data."""
+    if not ai_configs:
+        return {}
+
+    orchestrator = MultiAIOrchestrator(ai_configs)
+
+    # Prepare data summary for AI
+    data_summary = {}
+    for model, data in model_data.items():
+        if forecast_hour in data.z500:
+            z500 = data.z500[forecast_hour]
+            data_summary[model.value] = {
+                "z500_mean": float(np.nanmean(z500.data)),
+                "z500_min": float(np.nanmin(z500.data)),
+                "z500_max": float(np.nanmax(z500.data)),
+            }
+        if forecast_hour in data.t850:
+            t850 = data.t850[forecast_hour]
+            data_summary[model.value]["t850_mean"] = float(np.nanmean(t850.data) - 273.15)
+        if forecast_hour in data.slp:
+            slp = data.slp[forecast_hour]
+            data_summary[model.value]["slp_min"] = float(np.nanmin(slp.data))
+            data_summary[model.value]["slp_max"] = float(np.nanmax(slp.data))
+
+    results = await orchestrator.analyze_all(
+        model_data=data_summary,
+        field_selection=["Z500", "T850", "SLP"],
+        forecast_hour=forecast_hour,
+    )
+
+    # Convert to dict format for display
+    ai_analyses = {}
+    for result in results:
+        ai_analyses[result.provider.full_name] = {
+            'confidence': result.confidence_score,
+            'summary': result.synoptic_summary,
+            'physics': result.physical_interpretation,
+            'uncertainty': result.confidence_assessment,
+            'patterns': result.pattern_identification,
+            'findings': result.key_findings,
+            'warnings': result.warnings,
+            'inference_time_ms': result.inference_time_ms,
+        }
+
+    return ai_analyses
+
+
+def compute_ensemble(model_data: dict, forecast_hour: int):
+    """Compute ensemble mean and spread from model data."""
+    from dataclasses import dataclass
+
+    @dataclass
+    class EnsembleField:
+        ensemble_mean: np.ndarray
+        ensemble_spread: np.ndarray
+        lats: np.ndarray
+        lons: np.ndarray
+
+    @dataclass
+    class EnsembleResult:
+        valid_time: datetime
+        z500: Optional[EnsembleField] = None
+        t850: Optional[EnsembleField] = None
+        slp: Optional[EnsembleField] = None
+        model_weights: list = None
+        final_confidence_score: float = 75.0
+        synoptic_summary: str = ""
+        warnings: list = None
+
+    # Collect Z500 from all models
+    z500_arrays = []
+    lats = None
+    lons = None
+    valid_time = datetime.utcnow()
+
+    for model, data in model_data.items():
+        if forecast_hour in data.z500:
+            field = data.z500[forecast_hour]
+            z500_arrays.append(field.data)
+            if lats is None:
+                lats = field.lats
+                lons = field.lons
+                valid_time = field.valid_time
+
+    result = EnsembleResult(valid_time=valid_time, model_weights=[], warnings=[])
+
+    if z500_arrays and lats is not None:
+        z500_stack = np.stack(z500_arrays, axis=0)
+        result.z500 = EnsembleField(
+            ensemble_mean=np.nanmean(z500_stack, axis=0),
+            ensemble_spread=np.nanstd(z500_stack, axis=0),
+            lats=lats,
+            lons=lons,
+        )
+
+    # Collect T850
+    t850_arrays = []
+    for model, data in model_data.items():
+        if forecast_hour in data.t850:
+            t850_arrays.append(data.t850[forecast_hour].data)
+
+    if t850_arrays and lats is not None:
+        t850_stack = np.stack(t850_arrays, axis=0)
+        result.t850 = EnsembleField(
+            ensemble_mean=np.nanmean(t850_stack, axis=0),
+            ensemble_spread=np.nanstd(t850_stack, axis=0),
+            lats=lats,
+            lons=lons,
+        )
+
+    # Collect SLP
+    slp_arrays = []
+    for model, data in model_data.items():
+        if forecast_hour in data.slp:
+            slp_arrays.append(data.slp[forecast_hour].data)
+
+    if slp_arrays and lats is not None:
+        slp_stack = np.stack(slp_arrays, axis=0)
+        result.slp = EnsembleField(
+            ensemble_mean=np.nanmean(slp_stack, axis=0),
+            ensemble_spread=np.nanstd(slp_stack, axis=0),
+            lats=lats,
+            lons=lons,
+        )
+
+    return result
 
 
 # ============================================================================
@@ -508,11 +656,41 @@ def main():
 
     # Main content area
     if config['run_analysis']:
-        with st.spinner("🔄 Eseguendo analisi... (può richiedere alcuni minuti)"):
-            # Here we would run the actual analysis
-            # For now, we'll set a flag
-            st.session_state.analysis_complete = True
-            st.success("✅ Analisi completata!")
+        with st.spinner("🔄 Scaricando dati meteorologici da Open-Meteo..."):
+            try:
+                # Run async data fetching
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                # Fetch weather data
+                st.info("📡 Collegamento a Open-Meteo API...")
+                model_data = loop.run_until_complete(
+                    fetch_weather_data(config['models'], config['forecast_hours'])
+                )
+                st.session_state.model_data = model_data
+
+                # Compute ensemble
+                st.info("🔢 Calcolo ensemble multi-modello...")
+                ensemble_results = {}
+                for hour in config['forecast_hours']:
+                    ensemble_results[hour] = compute_ensemble(model_data, hour)
+                st.session_state.ensemble_results = ensemble_results
+
+                # Run AI analysis if providers are configured
+                if config['ai_configs']:
+                    st.info("🤖 Esecuzione analisi AI...")
+                    ai_analyses = loop.run_until_complete(
+                        run_ai_analysis(model_data, config['ai_configs'], st.session_state.current_hour)
+                    )
+                    st.session_state.ai_analyses = ai_analyses
+
+                loop.close()
+                st.session_state.analysis_complete = True
+                st.success(f"✅ Analisi completata! Dati da {len(model_data)} modelli.")
+
+            except Exception as e:
+                st.error(f"❌ Errore durante l'analisi: {str(e)}")
+                logger.exception("Analysis failed")
 
     # Time slider
     current_hour = render_time_slider(config['forecast_hours'])

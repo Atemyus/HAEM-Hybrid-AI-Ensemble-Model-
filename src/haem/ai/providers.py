@@ -246,28 +246,108 @@ class ClaudeAnalyzer(BaseAIAnalyzer):
     ) -> AIAnalysisResult:
         """Analyze using Claude."""
         import time
+        import os
 
         start_time = time.time()
+        prompt = self._build_analysis_prompt(model_data, field_selection, forecast_hour)
 
-        # In production, this would call the Anthropic API
-        # For now, return a placeholder
+        try:
+            import anthropic
 
-        inference_time = (time.time() - start_time) * 1000
+            api_key = self.config.api_key or os.getenv("ANTHROPIC_API_KEY")
+            if not api_key:
+                raise ValueError("ANTHROPIC_API_KEY not configured")
 
-        return AIAnalysisResult(
-            provider=self.provider,
-            model_id=self.config.effective_model,
-            timestamp=datetime.utcnow(),
-            synoptic_summary="Claude analysis placeholder",
-            pattern_identification=["Trough analysis", "Ridge identification"],
-            physical_interpretation="Physical interpretation from Claude",
-            confidence_assessment="High confidence based on model agreement",
-            key_findings=["Key finding 1", "Key finding 2"],
-            warnings=[],
-            confidence_score=75.0,
-            reasoning_quality=0.85,
-            inference_time_ms=inference_time,
-        )
+            client = anthropic.Anthropic(api_key=api_key)
+
+            message = client.messages.create(
+                model=self.config.effective_model,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            response_text = message.content[0].text
+            inference_time = (time.time() - start_time) * 1000
+
+            # Parse response
+            parsed = self._parse_response(response_text)
+
+            return AIAnalysisResult(
+                provider=self.provider,
+                model_id=self.config.effective_model,
+                timestamp=datetime.utcnow(),
+                synoptic_summary=parsed.get("synoptic_summary", response_text[:500]),
+                pattern_identification=parsed.get("patterns", ["Analisi pattern completata"]),
+                physical_interpretation=parsed.get("physics", "Interpretazione fisica disponibile"),
+                confidence_assessment=parsed.get("confidence_text", "Confidenza valutata"),
+                key_findings=parsed.get("findings", ["Analisi completata"]),
+                warnings=parsed.get("warnings", []),
+                confidence_score=parsed.get("confidence_score", 80.0),
+                reasoning_quality=0.90,
+                raw_response=response_text,
+                inference_time_ms=inference_time,
+            )
+
+        except Exception as e:
+            logger.error(f"Claude analysis failed: {e}")
+            inference_time = (time.time() - start_time) * 1000
+            return AIAnalysisResult(
+                provider=self.provider,
+                model_id=self.config.effective_model,
+                timestamp=datetime.utcnow(),
+                synoptic_summary=f"Errore nell'analisi: {str(e)}",
+                pattern_identification=[],
+                physical_interpretation="",
+                confidence_assessment="Analisi non completata",
+                key_findings=[],
+                warnings=[f"Errore: {str(e)}"],
+                confidence_score=0.0,
+                reasoning_quality=0.0,
+                inference_time_ms=inference_time,
+            )
+
+    def _parse_response(self, text: str) -> dict:
+        """Parse Claude's response into structured data."""
+        result = {
+            "synoptic_summary": "",
+            "patterns": [],
+            "physics": "",
+            "confidence_text": "",
+            "confidence_score": 75.0,
+            "findings": [],
+            "warnings": [],
+        }
+
+        # Extract sections from response
+        sections = text.split("##")
+        for section in sections:
+            lower = section.lower()
+            if "synoptic" in lower or "sinottic" in lower:
+                result["synoptic_summary"] = section.strip()[:800]
+            elif "pattern" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["patterns"] = [l.lstrip("- ") for l in lines[:5]]
+            elif "physic" in lower or "fisic" in lower:
+                result["physics"] = section.strip()[:600]
+            elif "confidence" in lower or "confidenza" in lower:
+                result["confidence_text"] = section.strip()[:400]
+                # Try to extract score
+                import re
+                match = re.search(r'(\d{1,3})\s*[%/]?\s*(?:su\s*100|out of 100)?', section)
+                if match:
+                    result["confidence_score"] = min(100, float(match.group(1)))
+            elif "finding" in lower or "key" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["findings"] = [l.lstrip("- ") for l in lines[:5]]
+            elif "warning" in lower or "avvert" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["warnings"] = [l.lstrip("- ") for l in lines[:3]]
+
+        if not result["synoptic_summary"]:
+            result["synoptic_summary"] = text[:800]
+
+        return result
 
 
 class GPT4Analyzer(BaseAIAnalyzer):
@@ -281,24 +361,87 @@ class GPT4Analyzer(BaseAIAnalyzer):
     ) -> AIAnalysisResult:
         """Analyze using GPT-4."""
         import time
+        import os
 
         start_time = time.time()
-        inference_time = (time.time() - start_time) * 1000
+        prompt = self._build_analysis_prompt(model_data, field_selection, forecast_hour)
 
-        return AIAnalysisResult(
-            provider=self.provider,
-            model_id=self.config.effective_model,
-            timestamp=datetime.utcnow(),
-            synoptic_summary="GPT-4 analysis placeholder",
-            pattern_identification=["Pattern 1", "Pattern 2"],
-            physical_interpretation="GPT-4 physical interpretation",
-            confidence_assessment="Moderate confidence",
-            key_findings=["Finding 1"],
-            warnings=[],
-            confidence_score=70.0,
-            reasoning_quality=0.80,
-            inference_time_ms=inference_time,
-        )
+        try:
+            from openai import OpenAI
+
+            api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not configured")
+
+            client = OpenAI(api_key=api_key)
+
+            response = client.chat.completions.create(
+                model=self.config.effective_model,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            response_text = response.choices[0].message.content
+            inference_time = (time.time() - start_time) * 1000
+
+            # Parse response
+            parsed = self._parse_response(response_text)
+
+            return AIAnalysisResult(
+                provider=self.provider,
+                model_id=self.config.effective_model,
+                timestamp=datetime.utcnow(),
+                synoptic_summary=parsed.get("synoptic_summary", response_text[:500]),
+                pattern_identification=parsed.get("patterns", ["Analisi completata"]),
+                physical_interpretation=parsed.get("physics", ""),
+                confidence_assessment=parsed.get("confidence_text", ""),
+                key_findings=parsed.get("findings", []),
+                warnings=parsed.get("warnings", []),
+                confidence_score=parsed.get("confidence_score", 75.0),
+                reasoning_quality=0.85,
+                raw_response=response_text,
+                inference_time_ms=inference_time,
+            )
+
+        except Exception as e:
+            logger.error(f"GPT-4 analysis failed: {e}")
+            inference_time = (time.time() - start_time) * 1000
+            return AIAnalysisResult(
+                provider=self.provider,
+                model_id=self.config.effective_model,
+                timestamp=datetime.utcnow(),
+                synoptic_summary=f"Errore: {str(e)}",
+                pattern_identification=[],
+                physical_interpretation="",
+                confidence_assessment="",
+                key_findings=[],
+                warnings=[f"Errore: {str(e)}"],
+                confidence_score=0.0,
+                reasoning_quality=0.0,
+                inference_time_ms=inference_time,
+            )
+
+    def _parse_response(self, text: str) -> dict:
+        """Parse GPT-4's response."""
+        result = {"synoptic_summary": text[:800], "patterns": [], "physics": "",
+                  "confidence_text": "", "confidence_score": 75.0, "findings": [], "warnings": []}
+        sections = text.split("##")
+        for section in sections:
+            lower = section.lower()
+            if "synoptic" in lower:
+                result["synoptic_summary"] = section.strip()[:800]
+            elif "pattern" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["patterns"] = [l.lstrip("- ") for l in lines[:5]]
+            elif "physical" in lower:
+                result["physics"] = section.strip()[:600]
+            elif "confidence" in lower:
+                result["confidence_text"] = section.strip()[:400]
+            elif "finding" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["findings"] = [l.lstrip("- ") for l in lines[:5]]
+        return result
 
 
 class GeminiAnalyzer(BaseAIAnalyzer):
@@ -312,24 +455,82 @@ class GeminiAnalyzer(BaseAIAnalyzer):
     ) -> AIAnalysisResult:
         """Analyze using Gemini."""
         import time
+        import os
 
         start_time = time.time()
-        inference_time = (time.time() - start_time) * 1000
+        prompt = self._build_analysis_prompt(model_data, field_selection, forecast_hour)
 
-        return AIAnalysisResult(
-            provider=self.provider,
-            model_id=self.config.effective_model,
-            timestamp=datetime.utcnow(),
-            synoptic_summary="Gemini analysis placeholder",
-            pattern_identification=["Pattern A", "Pattern B"],
-            physical_interpretation="Gemini physical interpretation",
-            confidence_assessment="Analysis confidence from Gemini",
-            key_findings=["Gemini finding 1"],
-            warnings=[],
-            confidence_score=72.0,
-            reasoning_quality=0.78,
-            inference_time_ms=inference_time,
-        )
+        try:
+            import google.generativeai as genai
+
+            api_key = self.config.api_key or os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                raise ValueError("GOOGLE_API_KEY not configured")
+
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(self.config.effective_model)
+
+            response = model.generate_content(prompt)
+            response_text = response.text
+            inference_time = (time.time() - start_time) * 1000
+
+            # Parse response
+            parsed = self._parse_response(response_text)
+
+            return AIAnalysisResult(
+                provider=self.provider,
+                model_id=self.config.effective_model,
+                timestamp=datetime.utcnow(),
+                synoptic_summary=parsed.get("synoptic_summary", response_text[:500]),
+                pattern_identification=parsed.get("patterns", ["Analisi completata"]),
+                physical_interpretation=parsed.get("physics", ""),
+                confidence_assessment=parsed.get("confidence_text", ""),
+                key_findings=parsed.get("findings", []),
+                warnings=parsed.get("warnings", []),
+                confidence_score=parsed.get("confidence_score", 75.0),
+                reasoning_quality=0.82,
+                raw_response=response_text,
+                inference_time_ms=inference_time,
+            )
+
+        except Exception as e:
+            logger.error(f"Gemini analysis failed: {e}")
+            inference_time = (time.time() - start_time) * 1000
+            return AIAnalysisResult(
+                provider=self.provider,
+                model_id=self.config.effective_model,
+                timestamp=datetime.utcnow(),
+                synoptic_summary=f"Errore: {str(e)}",
+                pattern_identification=[],
+                physical_interpretation="",
+                confidence_assessment="",
+                key_findings=[],
+                warnings=[f"Errore: {str(e)}"],
+                confidence_score=0.0,
+                reasoning_quality=0.0,
+                inference_time_ms=inference_time,
+            )
+
+    def _parse_response(self, text: str) -> dict:
+        """Parse Gemini's response."""
+        result = {"synoptic_summary": text[:800], "patterns": [], "physics": "",
+                  "confidence_text": "", "confidence_score": 75.0, "findings": [], "warnings": []}
+        sections = text.split("##")
+        for section in sections:
+            lower = section.lower()
+            if "synoptic" in lower:
+                result["synoptic_summary"] = section.strip()[:800]
+            elif "pattern" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["patterns"] = [l.lstrip("- ") for l in lines[:5]]
+            elif "physical" in lower:
+                result["physics"] = section.strip()[:600]
+            elif "confidence" in lower:
+                result["confidence_text"] = section.strip()[:400]
+            elif "finding" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["findings"] = [l.lstrip("- ") for l in lines[:5]]
+        return result
 
 
 class MultiAIOrchestrator:
