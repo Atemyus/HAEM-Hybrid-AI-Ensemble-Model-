@@ -295,25 +295,43 @@ def render_sidebar():
     auto_refresh = st.sidebar.checkbox("Auto-refresh attivo", value=st.session_state.auto_refresh)
     st.session_state.auto_refresh = auto_refresh
 
-    refresh_interval = st.sidebar.selectbox(
-        "Intervallo refresh",
-        options=[30, 60, 120, 180],
-        index=1,
-        format_func=lambda x: f"{x} minuti",
-        disabled=not auto_refresh,
-    )
+    # Synoptic update times explanation
+    st.sidebar.caption("Aggiornamento sincronizzato con uscite sinottiche (00/06/12/18 UTC)")
 
     # Show last update time
     if st.session_state.last_update:
-        st.sidebar.info(f"Ultimo update: {st.session_state.last_update.strftime('%H:%M:%S')}")
+        st.sidebar.info(f"Ultimo update: {st.session_state.last_update.strftime('%H:%M:%S UTC')}")
+
+    # Show next synoptic run
+    now_utc = datetime.utcnow()
+    synoptic_hours = [0, 6, 12, 18]
+    # Models are available ~3-4h after run time
+    availability_delay = 4  # hours
+
+    # Find next available synoptic run
+    current_hour = now_utc.hour
+    for sh in synoptic_hours:
+        available_hour = (sh + availability_delay) % 24
+        if current_hour < available_hour:
+            next_run = sh
+            hours_until = available_hour - current_hour
+            break
+    else:
+        next_run = synoptic_hours[0]
+        hours_until = (24 - current_hour) + availability_delay
+
+    st.sidebar.write(f"Prossima uscita completa: **{next_run:02d}Z** (disponibile tra ~{hours_until}h)")
 
     # Show model update frequencies
-    with st.sidebar.expander("Frequenza aggiornamento modelli"):
-        st.write("- **ECMWF**: ogni 6 ore")
-        st.write("- **GFS**: ogni ora")
-        st.write("- **ICON**: ogni 3 ore")
-        st.write("- **GEM**: ogni 6 ore")
-        st.write("- **ARPEGE**: ogni ora")
+    with st.sidebar.expander("Uscite sinottiche modelli"):
+        st.write("**Runs principali (00/06/12/18 UTC):**")
+        st.write("- ECMWF IFS: ogni 6h")
+        st.write("- GFS: ogni 6h")
+        st.write("- ICON: ogni 6h")
+        st.write("- GEM: ogni 6h")
+        st.write("- ARPEGE: ogni 6h")
+        st.write("")
+        st.write("*Dati disponibili ~3-4h dopo il run*")
 
     # Run button
     st.sidebar.markdown("---")
@@ -326,7 +344,8 @@ def render_sidebar():
         'forecast_hours': forecast_hours,
         'run_analysis': run_analysis,
         'auto_refresh': auto_refresh,
-        'refresh_interval': refresh_interval,
+        'next_synoptic_run': next_run,
+        'hours_until_next': hours_until,
     }
 
 
@@ -685,14 +704,30 @@ def main():
     # Sidebar
     config = render_sidebar()
 
-    # Check for auto-refresh
+    # Check for auto-refresh based on synoptic schedule
     should_refresh = False
     if config['auto_refresh'] and st.session_state.last_update:
         from datetime import timedelta
-        time_since_update = datetime.utcnow() - st.session_state.last_update
-        if time_since_update > timedelta(minutes=config['refresh_interval']):
-            should_refresh = True
-            st.info(f"🔄 Auto-refresh in corso... (ultimo update: {st.session_state.last_update.strftime('%H:%M')})")
+
+        now_utc = datetime.utcnow()
+        last_update = st.session_state.last_update
+
+        # Synoptic runs: 00, 06, 12, 18 UTC - available ~4h after
+        synoptic_availability = [4, 10, 16, 22]  # Hours when data is available
+
+        # Check if we've passed a new synoptic availability window since last update
+        for avail_hour in synoptic_availability:
+            # Create datetime for today's availability window
+            today_avail = now_utc.replace(hour=avail_hour, minute=0, second=0, microsecond=0)
+            if now_utc.hour < avail_hour:
+                # This window is in the future today
+                continue
+
+            # Check if this window is after our last update
+            if last_update < today_avail <= now_utc:
+                should_refresh = True
+                synoptic_run = (avail_hour - 4) % 24
+                st.info(f"🔄 Nuova uscita sinottica {synoptic_run:02d}Z disponibile! Aggiornamento in corso...")
 
     # Main content area
     if config['run_analysis'] or should_refresh:
@@ -788,17 +823,41 @@ def main():
         f"Ultimo aggiornamento: {last_update_str}*"
     )
 
-    # Auto-refresh mechanism using Streamlit's experimental_rerun
-    if config['auto_refresh'] and st.session_state.last_update:
+    # Auto-refresh mechanism synced with synoptic runs
+    if config['auto_refresh']:
         import time as time_module
         from datetime import timedelta
-        time_since = datetime.utcnow() - st.session_state.last_update
-        next_refresh_seconds = (config['refresh_interval'] * 60) - time_since.total_seconds()
-        if next_refresh_seconds > 0:
-            st.sidebar.write(f"Prossimo refresh: {int(next_refresh_seconds // 60)}m {int(next_refresh_seconds % 60)}s")
-            # Use st.empty() placeholder for countdown (optional)
-            time_module.sleep(min(60, next_refresh_seconds))  # Check every minute max
-            st.rerun()
+
+        now_utc = datetime.utcnow()
+
+        # Calculate time until next synoptic data availability (04, 10, 16, 22 UTC)
+        synoptic_availability = [4, 10, 16, 22]
+        current_hour = now_utc.hour
+        current_minute = now_utc.minute
+
+        # Find next availability window
+        next_avail_hour = None
+        for avail_hour in synoptic_availability:
+            if current_hour < avail_hour:
+                next_avail_hour = avail_hour
+                break
+        if next_avail_hour is None:
+            next_avail_hour = synoptic_availability[0]  # Tomorrow's 04 UTC
+
+        # Calculate seconds until next availability
+        if next_avail_hour > current_hour:
+            hours_until = next_avail_hour - current_hour
+            seconds_until = (hours_until * 3600) - (current_minute * 60)
+        else:
+            hours_until = (24 - current_hour) + next_avail_hour
+            seconds_until = (hours_until * 3600) - (current_minute * 60)
+
+        synoptic_run = (next_avail_hour - 4) % 24
+        st.sidebar.write(f"Prossimo refresh: run **{synoptic_run:02d}Z** tra {hours_until}h {60 - current_minute}m")
+
+        # Check every 5 minutes for new data
+        time_module.sleep(min(300, seconds_until))
+        st.rerun()
 
 
 if __name__ == "__main__":
