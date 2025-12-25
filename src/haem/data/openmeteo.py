@@ -35,12 +35,12 @@ logger = logging.getLogger(__name__)
 class OpenMeteoModel(str, Enum):
     """Open-Meteo model identifiers."""
 
-    ECMWF_IFS = "ecmwf_ifs04"          # ECMWF IFS 0.4°
+    ECMWF_IFS = "ecmwf_ifs025"         # ECMWF IFS 0.25° (corretto)
     GFS_SEAMLESS = "gfs_seamless"      # GFS with HRRR blend
-    GFS_GLOBAL = "gfs_global"          # Pure GFS
-    ICON_GLOBAL = "icon_global"        # DWD ICON
-    GEM_GLOBAL = "gem_global"          # Canadian GEM
-    ARPEGE_WORLD = "arpege_world"      # Météo-France (substitute for UKMO)
+    GFS_GLOBAL = "gfs_global"          # Pure GFS 0.25°
+    ICON_GLOBAL = "icon_global"        # DWD ICON 0.1°
+    GEM_GLOBAL = "gem_global"          # Canadian GEM 0.15°
+    ARPEGE_WORLD = "arpege_world"      # Météo-France 0.25°
     JMA_SEAMLESS = "jma_seamless"      # Japan Meteorological Agency
 
     @classmethod

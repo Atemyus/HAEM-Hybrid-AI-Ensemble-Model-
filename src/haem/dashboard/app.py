@@ -204,6 +204,10 @@ def init_session_state():
         st.session_state.current_hour = 48
     if 'selected_field' not in st.session_state:
         st.session_state.selected_field = 'z500'
+    if 'last_update' not in st.session_state:
+        st.session_state.last_update = None
+    if 'auto_refresh' not in st.session_state:
+        st.session_state.auto_refresh = False
 
 
 # ============================================================================
@@ -286,6 +290,31 @@ def render_sidebar():
     step_hours = st.sidebar.selectbox("Intervallo", [3, 6, 12], index=1)
     forecast_hours = list(range(0, max_hours + 1, step_hours))
 
+    # Auto-refresh settings
+    st.sidebar.subheader("🔄 Aggiornamento Automatico")
+    auto_refresh = st.sidebar.checkbox("Auto-refresh attivo", value=st.session_state.auto_refresh)
+    st.session_state.auto_refresh = auto_refresh
+
+    refresh_interval = st.sidebar.selectbox(
+        "Intervallo refresh",
+        options=[30, 60, 120, 180],
+        index=1,
+        format_func=lambda x: f"{x} minuti",
+        disabled=not auto_refresh,
+    )
+
+    # Show last update time
+    if st.session_state.last_update:
+        st.sidebar.info(f"Ultimo update: {st.session_state.last_update.strftime('%H:%M:%S')}")
+
+    # Show model update frequencies
+    with st.sidebar.expander("Frequenza aggiornamento modelli"):
+        st.write("- **ECMWF**: ogni 6 ore")
+        st.write("- **GFS**: ogni ora")
+        st.write("- **ICON**: ogni 3 ore")
+        st.write("- **GEM**: ogni 6 ore")
+        st.write("- **ARPEGE**: ogni ora")
+
     # Run button
     st.sidebar.markdown("---")
     run_analysis = st.sidebar.button("🚀 ESEGUI ANALISI", use_container_width=True)
@@ -296,6 +325,8 @@ def render_sidebar():
         'ai_configs': ai_configs,
         'forecast_hours': forecast_hours,
         'run_analysis': run_analysis,
+        'auto_refresh': auto_refresh,
+        'refresh_interval': refresh_interval,
     }
 
 
@@ -654,8 +685,17 @@ def main():
     # Sidebar
     config = render_sidebar()
 
+    # Check for auto-refresh
+    should_refresh = False
+    if config['auto_refresh'] and st.session_state.last_update:
+        from datetime import timedelta
+        time_since_update = datetime.utcnow() - st.session_state.last_update
+        if time_since_update > timedelta(minutes=config['refresh_interval']):
+            should_refresh = True
+            st.info(f"🔄 Auto-refresh in corso... (ultimo update: {st.session_state.last_update.strftime('%H:%M')})")
+
     # Main content area
-    if config['run_analysis']:
+    if config['run_analysis'] or should_refresh:
         with st.spinner("🔄 Scaricando dati meteorologici da Open-Meteo..."):
             try:
                 # Run async data fetching
@@ -686,6 +726,7 @@ def main():
 
                 loop.close()
                 st.session_state.analysis_complete = True
+                st.session_state.last_update = datetime.utcnow()
                 st.success(f"✅ Analisi completata! Dati da {len(model_data)} modelli.")
 
             except Exception as e:
@@ -741,10 +782,23 @@ def main():
 
     # Footer
     st.markdown("---")
+    last_update_str = st.session_state.last_update.strftime('%Y-%m-%d %H:%MZ') if st.session_state.last_update else "Mai"
     st.markdown(
-        "*HAEM v1.0 | Dati: Open-Meteo API (ECMWF, GFS, ICON, GEM, ARPEGE) | "
-        f"Ultimo aggiornamento: {datetime.utcnow().strftime('%Y-%m-%d %H:%MZ')}*"
+        f"*HAEM v1.0 | Dati: Open-Meteo API (ECMWF, GFS, ICON, GEM, ARPEGE) | "
+        f"Ultimo aggiornamento: {last_update_str}*"
     )
+
+    # Auto-refresh mechanism using Streamlit's experimental_rerun
+    if config['auto_refresh'] and st.session_state.last_update:
+        import time as time_module
+        from datetime import timedelta
+        time_since = datetime.utcnow() - st.session_state.last_update
+        next_refresh_seconds = (config['refresh_interval'] * 60) - time_since.total_seconds()
+        if next_refresh_seconds > 0:
+            st.sidebar.write(f"Prossimo refresh: {int(next_refresh_seconds // 60)}m {int(next_refresh_seconds % 60)}s")
+            # Use st.empty() placeholder for countdown (optional)
+            time_module.sleep(min(60, next_refresh_seconds))  # Check every minute max
+            st.rerun()
 
 
 if __name__ == "__main__":
