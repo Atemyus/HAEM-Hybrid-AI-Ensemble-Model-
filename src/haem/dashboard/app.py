@@ -29,8 +29,13 @@ st.set_page_config(
 from haem.models.meteorological import NWPModel
 from haem.data.meteociel_fields import FieldSelection, FieldPresets, MeteocielField
 from haem.ai.providers import AIProvider, AIProviderConfig, AIPresets
+from haem.config.settings import get_api_keys, get_app_config
 
 logger = logging.getLogger(__name__)
+
+# Load API keys
+api_keys = get_api_keys()
+app_config = get_app_config()
 
 
 # ============================================================================
@@ -98,12 +103,34 @@ def render_sidebar():
     st.sidebar.subheader("🤖 AI Providers")
     ai_configs = []
 
-    if st.sidebar.checkbox("Claude (Anthropic)", value=True):
-        ai_configs.append(AIProviderConfig(provider=AIProvider.CLAUDE))
-    if st.sidebar.checkbox("GPT-4 (OpenAI)", value=True):
-        ai_configs.append(AIProviderConfig(provider=AIProvider.GPT4))
-    if st.sidebar.checkbox("Gemini (Google)", value=False):
-        ai_configs.append(AIProviderConfig(provider=AIProvider.GEMINI))
+    # Show API key status
+    with st.sidebar.expander("API Keys Status"):
+        if api_keys.has_claude:
+            st.success("Claude: Configurato")
+        else:
+            st.warning("Claude: Non configurato")
+        if api_keys.has_gpt4:
+            st.success("GPT-4: Configurato")
+        else:
+            st.warning("GPT-4: Non configurato")
+        if api_keys.has_gemini:
+            st.success("Gemini: Configurato")
+        else:
+            st.warning("Gemini: Non configurato")
+
+        if not api_keys.available_providers:
+            st.info("Modalita demo attiva")
+
+    # Only show enabled providers
+    if api_keys.has_claude:
+        if st.sidebar.checkbox("Claude (Anthropic)", value=True):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.CLAUDE))
+    if api_keys.has_gpt4:
+        if st.sidebar.checkbox("GPT-4 (OpenAI)", value=True):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.GPT4))
+    if api_keys.has_gemini:
+        if st.sidebar.checkbox("Gemini (Google)", value=True):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.GEMINI))
 
     # Forecast hours
     st.sidebar.subheader("⏱️ Ore Previsione")

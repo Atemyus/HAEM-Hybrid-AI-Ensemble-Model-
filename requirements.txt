@@ -7,6 +7,9 @@ scipy>=1.10.0
 pandas>=2.0.0
 pydantic>=2.0.0
 
+# Environment configuration
+python-dotenv>=1.0.0
+
 # Async HTTP
 aiohttp>=3.8.0
 requests>=2.28.0
@@ -17,7 +20,6 @@ netCDF4>=1.6.0
 
 # Visualization
 matplotlib>=3.7.0
-# cartopy>=0.21.0  # Optional, for geographic projections
 
 # Dashboard
 streamlit>=1.28.0
@@ -29,7 +31,7 @@ rich>=13.0.0
 # Date/time
 python-dateutil>=2.8.0
 
-# Optional: AI providers (install as needed)
-# anthropic>=0.18.0  # For Claude
-# openai>=1.0.0      # For GPT-4
-# google-generativeai>=0.3.0  # For Gemini
+# AI providers
+anthropic>=0.18.0
+openai>=1.0.0
+google-generativeai>=0.3.0
