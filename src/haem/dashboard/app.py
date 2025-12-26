@@ -7,6 +7,8 @@ with multi-AI interpretation.
 
 import asyncio
 import logging
+import warnings
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -16,6 +18,9 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+
+# Suppress numpy warnings for std with few data points (expected behavior)
+warnings.filterwarnings('ignore', category=RuntimeWarning, module='numpy')
 
 # Configure page
 st.set_page_config(
@@ -34,6 +39,40 @@ from haem.data.openmeteo import MultiModelOpenMeteoFetcher, OpenMeteoConfig
 from haem.data.cache import DashboardCache
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# ENSEMBLE DATA CLASSES (module level for pickle compatibility)
+# ============================================================================
+
+@dataclass
+class EnsembleField:
+    """Represents ensemble statistics for a single meteorological field."""
+    ensemble_mean: np.ndarray
+    ensemble_spread: np.ndarray
+    lats: np.ndarray
+    lons: np.ndarray
+
+
+@dataclass
+class EnsembleResult:
+    """Complete ensemble result for a forecast hour."""
+    valid_time: datetime
+    z500: Optional[EnsembleField] = None
+    z850: Optional[EnsembleField] = None
+    t850: Optional[EnsembleField] = None
+    t500: Optional[EnsembleField] = None
+    slp: Optional[EnsembleField] = None
+    t2m: Optional[EnsembleField] = None
+    precip: Optional[EnsembleField] = None
+    snow: Optional[EnsembleField] = None
+    wind_10m: Optional[EnsembleField] = None
+    wind_300: Optional[EnsembleField] = None
+    cape: Optional[EnsembleField] = None
+    model_weights: list = dataclass_field(default_factory=list)
+    final_confidence_score: float = 75.0
+    synoptic_summary: str = ""
+    warnings: list = dataclass_field(default_factory=list)
 
 # Initialize dashboard cache
 dashboard_cache = DashboardCache()
@@ -151,33 +190,7 @@ async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], 
 
 def compute_ensemble(model_data: dict, forecast_hour: int):
     """Compute ensemble mean and spread from model data."""
-    from dataclasses import dataclass, field as dataclass_field
-
-    @dataclass
-    class EnsembleField:
-        ensemble_mean: np.ndarray
-        ensemble_spread: np.ndarray
-        lats: np.ndarray
-        lons: np.ndarray
-
-    @dataclass
-    class EnsembleResult:
-        valid_time: datetime
-        z500: Optional[EnsembleField] = None
-        z850: Optional[EnsembleField] = None
-        t850: Optional[EnsembleField] = None
-        t500: Optional[EnsembleField] = None
-        slp: Optional[EnsembleField] = None
-        t2m: Optional[EnsembleField] = None
-        precip: Optional[EnsembleField] = None
-        snow: Optional[EnsembleField] = None
-        wind_10m: Optional[EnsembleField] = None
-        wind_300: Optional[EnsembleField] = None
-        cape: Optional[EnsembleField] = None
-        model_weights: list = dataclass_field(default_factory=list)
-        final_confidence_score: float = 75.0
-        synoptic_summary: str = ""
-        warnings: list = dataclass_field(default_factory=list)
+    # Uses module-level EnsembleField and EnsembleResult classes
 
     lats = None
     lons = None
