@@ -28,8 +28,6 @@ ENV PYTHONUNBUFFERED=1
 ENV STREAMLIT_SERVER_HEADLESS=true
 ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
-# Railway uses PORT env variable - default to 8501 for local testing
-ENV PORT=8501
-
-# Run Streamlit with dynamic port from Railway
-CMD streamlit run src/haem/dashboard/app.py --server.port=$PORT --server.address=0.0.0.0
+# Railway provides PORT env variable
+# Use shell form to expand $PORT variable
+CMD ["sh", "-c", "streamlit run src/haem/dashboard/app.py --server.port=${PORT:-8501} --server.address=0.0.0.0"]
