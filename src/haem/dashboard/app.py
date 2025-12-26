@@ -147,16 +147,23 @@ def compute_ensemble(model_data: dict, forecast_hour: int):
             field_dict = getattr(data, field_name, {})
             if forecast_hour in field_dict:
                 field = field_dict[forecast_hour]
-                arrays.append(field.data)
-                if lats is None:
-                    lats = field.lats
-                    lons = field.lons
-                    valid_time = field.valid_time
-        if arrays and lats is not None:
+                if field.data is not None and not np.all(np.isnan(field.data)):
+                    arrays.append(field.data)
+                    if lats is None:
+                        lats = field.lats
+                        lons = field.lons
+                        valid_time = field.valid_time
+        if len(arrays) >= 1 and lats is not None:
             stack = np.stack(arrays, axis=0)
+            ensemble_mean = np.nanmean(stack, axis=0)
+            # Only compute std if we have more than 1 model, otherwise set spread to 0
+            if len(arrays) > 1:
+                ensemble_spread = np.nanstd(stack, axis=0)
+            else:
+                ensemble_spread = np.zeros_like(ensemble_mean)
             return EnsembleField(
-                ensemble_mean=np.nanmean(stack, axis=0),
-                ensemble_spread=np.nanstd(stack, axis=0),
+                ensemble_mean=ensemble_mean,
+                ensemble_spread=ensemble_spread,
                 lats=lats,
                 lons=lons,
             )
