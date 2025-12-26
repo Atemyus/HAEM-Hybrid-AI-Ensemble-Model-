@@ -254,3 +254,121 @@ class DataCache:
             "cache_dir": str(self.cache_dir),
             "ttl_hours": self.ttl_hours,
         }
+
+
+class DashboardCache:
+    """
+    Simple file-based cache for dashboard weather data.
+
+    Caches the complete ensemble results and only refreshes
+    when a new synoptic run becomes available.
+    """
+
+    def __init__(self, cache_dir: Optional[Path] = None):
+        self.cache_dir = cache_dir or Path("/tmp/haem_dashboard_cache")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_file = self.cache_dir / "dashboard_data.pkl"
+        self.metadata_file = self.cache_dir / "cache_metadata.json"
+
+    def _get_last_available_run(self) -> datetime:
+        """
+        Get the last synoptic run that should have data available.
+        Data is typically available ~4 hours after the run.
+        """
+        now = datetime.utcnow()
+        # Go back 4 hours to find the last run with available data
+        available_time = now - timedelta(hours=4)
+        run_hour = (available_time.hour // 6) * 6
+        return available_time.replace(hour=run_hour, minute=0, second=0, microsecond=0)
+
+    def is_valid(self) -> bool:
+        """Check if the cache is still valid for the current synoptic run."""
+        if not self.cache_file.exists() or not self.metadata_file.exists():
+            logger.info("Dashboard cache files do not exist")
+            return False
+
+        try:
+            with open(self.metadata_file, 'r') as f:
+                metadata = json.load(f)
+
+            cached_run = datetime.fromisoformat(metadata.get('synoptic_run', ''))
+            last_available = self._get_last_available_run()
+
+            # Cache is valid if it's from the same or newer synoptic run
+            is_valid = cached_run >= last_available
+            logger.info(f"Dashboard cache - Cached run: {cached_run}, Last available: {last_available}, Valid: {is_valid}")
+            return is_valid
+
+        except Exception as e:
+            logger.warning(f"Error checking dashboard cache validity: {e}")
+            return False
+
+    def get(self) -> Optional[dict]:
+        """Get cached data if valid."""
+        if not self.is_valid():
+            return None
+
+        try:
+            with open(self.cache_file, 'rb') as f:
+                data = pickle.load(f)
+            logger.info("Loaded dashboard data from cache")
+            return data
+        except Exception as e:
+            logger.warning(f"Error loading dashboard cache: {e}")
+            return None
+
+    def save(self, model_data: dict, ensemble_results: dict) -> bool:
+        """Save data to cache."""
+        try:
+            cache_data = {
+                'model_data': model_data,
+                'ensemble_results': ensemble_results,
+            }
+            with open(self.cache_file, 'wb') as f:
+                pickle.dump(cache_data, f)
+
+            # Save metadata
+            now = datetime.utcnow()
+            run_hour = (now.hour // 6) * 6
+            synoptic_run = now.replace(hour=run_hour, minute=0, second=0, microsecond=0)
+
+            metadata = {
+                'synoptic_run': synoptic_run.isoformat(),
+                'cached_at': now.isoformat(),
+            }
+            with open(self.metadata_file, 'w') as f:
+                json.dump(metadata, f)
+
+            logger.info(f"Saved dashboard data to cache for run {metadata['synoptic_run']}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error saving dashboard cache: {e}")
+            return False
+
+    def get_info(self) -> Optional[dict]:
+        """Get information about the current cache."""
+        if not self.metadata_file.exists():
+            return None
+
+        try:
+            with open(self.metadata_file, 'r') as f:
+                metadata = json.load(f)
+            return {
+                'synoptic_run': metadata.get('synoptic_run'),
+                'cached_at': metadata.get('cached_at'),
+                'is_valid': self.is_valid(),
+            }
+        except Exception:
+            return None
+
+    def clear(self):
+        """Clear the cache."""
+        try:
+            if self.cache_file.exists():
+                self.cache_file.unlink()
+            if self.metadata_file.exists():
+                self.metadata_file.unlink()
+            logger.info("Dashboard cache cleared")
+        except Exception as e:
+            logger.error(f"Error clearing dashboard cache: {e}")

@@ -31,8 +31,12 @@ from haem.data.meteociel_fields import FieldSelection, FieldPresets, MeteocielFi
 from haem.ai.providers import AIProvider, AIProviderConfig, AIPresets, MultiAIOrchestrator
 from haem.config.settings import get_api_keys, get_app_config
 from haem.data.openmeteo import MultiModelOpenMeteoFetcher, OpenMeteoConfig
+from haem.data.cache import DashboardCache
 
 logger = logging.getLogger(__name__)
+
+# Initialize dashboard cache
+dashboard_cache = DashboardCache()
 
 # Load API keys
 api_keys = get_api_keys()
@@ -819,8 +823,23 @@ def main():
                 synoptic_run = (avail_hour - 4) % 24
                 st.info(f"🔄 Nuova uscita sinottica {synoptic_run:02d}Z disponibile! Aggiornamento in corso...")
 
-    # Main content area - auto-start on first load, manual button, or auto-refresh
-    if first_load or config['run_analysis'] or should_refresh:
+    # Check if we can use cached data (only on first load, not on manual refresh)
+    use_cache = first_load and not config['run_analysis'] and not should_refresh
+    cached_data = None
+
+    if use_cache:
+        cached_data = dashboard_cache.get()
+        if cached_data:
+            st.session_state.model_data = cached_data['model_data']
+            st.session_state.ensemble_results = cached_data['ensemble_results']
+            st.session_state.analysis_complete = True
+            st.session_state.last_update = datetime.utcnow()
+            cache_info = dashboard_cache.get_info()
+            if cache_info:
+                st.success(f"✅ Dati caricati dalla cache (run {cache_info.get('synoptic_run', 'N/A')[:16]})")
+
+    # Main content area - fetch new data if needed
+    if (first_load and not cached_data) or config['run_analysis'] or should_refresh:
         with st.spinner("🔄 Scaricando dati meteorologici da Open-Meteo..."):
             try:
                 # Run async data fetching
@@ -840,6 +859,9 @@ def main():
                 for hour in config['forecast_hours']:
                     ensemble_results[hour] = compute_ensemble(model_data, hour)
                 st.session_state.ensemble_results = ensemble_results
+
+                # Save to cache
+                dashboard_cache.save(model_data, ensemble_results)
 
                 # Run AI analysis if providers are configured
                 if config['ai_configs']:
