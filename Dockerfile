@@ -23,13 +23,8 @@ COPY . .
 # Install the package
 RUN pip install --no-cache-dir -e .
 
-# Make start script executable
-RUN chmod +x start.sh
-
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV STREAMLIT_SERVER_HEADLESS=true
-ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
-# Run start script
-CMD ["/bin/bash", "./start.sh"]
+# Run Python start script (handles PORT variable correctly)
+CMD ["python", "start.py"]
