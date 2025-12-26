@@ -107,7 +107,7 @@ async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], 
 
 def compute_ensemble(model_data: dict, forecast_hour: int):
     """Compute ensemble mean and spread from model data."""
-    from dataclasses import dataclass
+    from dataclasses import dataclass, field as dataclass_field
 
     @dataclass
     class EnsembleField:
@@ -120,68 +120,62 @@ def compute_ensemble(model_data: dict, forecast_hour: int):
     class EnsembleResult:
         valid_time: datetime
         z500: Optional[EnsembleField] = None
+        z850: Optional[EnsembleField] = None
         t850: Optional[EnsembleField] = None
+        t500: Optional[EnsembleField] = None
         slp: Optional[EnsembleField] = None
-        model_weights: list = None
+        t2m: Optional[EnsembleField] = None
+        precip: Optional[EnsembleField] = None
+        snow: Optional[EnsembleField] = None
+        wind_10m: Optional[EnsembleField] = None
+        wind_300: Optional[EnsembleField] = None
+        cape: Optional[EnsembleField] = None
+        model_weights: list = dataclass_field(default_factory=list)
         final_confidence_score: float = 75.0
         synoptic_summary: str = ""
-        warnings: list = None
+        warnings: list = dataclass_field(default_factory=list)
 
-    # Collect Z500 from all models
-    z500_arrays = []
     lats = None
     lons = None
     valid_time = datetime.utcnow()
 
-    for model, data in model_data.items():
-        if forecast_hour in data.z500:
-            field = data.z500[forecast_hour]
-            z500_arrays.append(field.data)
-            if lats is None:
-                lats = field.lats
-                lons = field.lons
-                valid_time = field.valid_time
+    # Helper function to collect and compute ensemble for a field
+    def collect_field(field_name: str):
+        nonlocal lats, lons, valid_time
+        arrays = []
+        for model, data in model_data.items():
+            field_dict = getattr(data, field_name, {})
+            if forecast_hour in field_dict:
+                field = field_dict[forecast_hour]
+                arrays.append(field.data)
+                if lats is None:
+                    lats = field.lats
+                    lons = field.lons
+                    valid_time = field.valid_time
+        if arrays and lats is not None:
+            stack = np.stack(arrays, axis=0)
+            return EnsembleField(
+                ensemble_mean=np.nanmean(stack, axis=0),
+                ensemble_spread=np.nanstd(stack, axis=0),
+                lats=lats,
+                lons=lons,
+            )
+        return None
 
-    result = EnsembleResult(valid_time=valid_time, model_weights=[], warnings=[])
+    result = EnsembleResult(valid_time=valid_time)
 
-    if z500_arrays and lats is not None:
-        z500_stack = np.stack(z500_arrays, axis=0)
-        result.z500 = EnsembleField(
-            ensemble_mean=np.nanmean(z500_stack, axis=0),
-            ensemble_spread=np.nanstd(z500_stack, axis=0),
-            lats=lats,
-            lons=lons,
-        )
-
-    # Collect T850
-    t850_arrays = []
-    for model, data in model_data.items():
-        if forecast_hour in data.t850:
-            t850_arrays.append(data.t850[forecast_hour].data)
-
-    if t850_arrays and lats is not None:
-        t850_stack = np.stack(t850_arrays, axis=0)
-        result.t850 = EnsembleField(
-            ensemble_mean=np.nanmean(t850_stack, axis=0),
-            ensemble_spread=np.nanstd(t850_stack, axis=0),
-            lats=lats,
-            lons=lons,
-        )
-
-    # Collect SLP
-    slp_arrays = []
-    for model, data in model_data.items():
-        if forecast_hour in data.slp:
-            slp_arrays.append(data.slp[forecast_hour].data)
-
-    if slp_arrays and lats is not None:
-        slp_stack = np.stack(slp_arrays, axis=0)
-        result.slp = EnsembleField(
-            ensemble_mean=np.nanmean(slp_stack, axis=0),
-            ensemble_spread=np.nanstd(slp_stack, axis=0),
-            lats=lats,
-            lons=lons,
-        )
+    # Collect all fields
+    result.z500 = collect_field('z500')
+    result.z850 = collect_field('z850')
+    result.t850 = collect_field('t850')
+    result.t500 = collect_field('t500')
+    result.slp = collect_field('slp')
+    result.t2m = collect_field('t2m')
+    result.precip = collect_field('precip')
+    result.snow = collect_field('snow')
+    result.wind_10m = collect_field('wind_10m')
+    result.wind_300 = collect_field('wind_300')
+    result.cape = collect_field('cape')
 
     return result
 
@@ -370,14 +364,46 @@ def create_map_figure(
         cmap = plt.cm.RdYlBu_r
         levels = np.arange(500, 596, 4)
         label = "Z500 (dam)"
+    elif field_type == 'z850':
+        cmap = plt.cm.RdYlBu_r
+        levels = np.arange(120, 160, 2)
+        label = "Z850 (dam)"
     elif field_type == 't850':
         cmap = plt.cm.RdYlBu_r
         levels = np.arange(-30, 25, 2)
         label = "T850 (°C)"
+    elif field_type == 't500':
+        cmap = plt.cm.RdYlBu_r
+        levels = np.arange(-50, -10, 2)
+        label = "T500 (°C)"
     elif field_type == 'slp':
         cmap = plt.cm.viridis
         levels = np.arange(980, 1040, 4)
         label = "SLP (hPa)"
+    elif field_type == 't2m':
+        cmap = plt.cm.RdYlBu_r
+        levels = np.arange(-20, 40, 2)
+        label = "T2m (°C)"
+    elif field_type == 'precip':
+        cmap = plt.cm.Blues
+        levels = np.array([0, 0.5, 1, 2, 5, 10, 20, 30, 50, 75, 100])
+        label = "Precipitazioni (mm)"
+    elif field_type == 'snow':
+        cmap = plt.cm.cool
+        levels = np.array([0, 1, 2, 5, 10, 20, 30, 50, 75, 100])
+        label = "Neve (cm)"
+    elif field_type == 'wind_10m':
+        cmap = plt.cm.YlOrRd
+        levels = np.arange(0, 30, 2)
+        label = "Vento 10m (m/s)"
+    elif field_type == 'wind_300':
+        cmap = plt.cm.jet
+        levels = np.arange(40, 200, 10)
+        label = "Jet Stream 300hPa (kt)"
+    elif field_type == 'cape':
+        cmap = plt.cm.YlOrRd
+        levels = np.array([0, 100, 250, 500, 1000, 1500, 2000, 3000, 4000, 5000])
+        label = "CAPE (J/kg)"
     elif field_type == 'spread':
         cmap = plt.cm.YlOrRd
         levels = np.arange(0, 20, 2)
@@ -428,7 +454,24 @@ def create_map_figure(
 def render_map_panel(ensemble_data, hour: int, field_type: str):
     """Render the main map panel."""
 
-    st.subheader(f"🗺️ Mappa Ensemble - {field_type.upper()} (+{hour}h)")
+    # Field display names
+    field_names = {
+        'z500': 'Z500 Geopotenziale',
+        'z850': 'Z850 Geopotenziale',
+        't850': 'T850 Temperatura',
+        't500': 'T500 Temperatura',
+        'slp': 'SLP Pressione',
+        't2m': 'T2m Temperatura',
+        'precip': 'Precipitazioni',
+        'snow': 'Neve',
+        'wind_10m': 'Vento 10m',
+        'wind_300': 'Jet Stream',
+        'cape': 'CAPE',
+        'spread': 'Spread Ensemble',
+    }
+    display_name = field_names.get(field_type, field_type.upper())
+
+    st.subheader(f"🗺️ {display_name} (+{hour}h)")
 
     if ensemble_data is None:
         # Show placeholder
@@ -454,29 +497,66 @@ def render_map_panel(ensemble_data, hour: int, field_type: str):
     # Real data rendering
     if hour in ensemble_data and ensemble_data[hour] is not None:
         result = ensemble_data[hour]
+        data = None
+        lats = None
+        lons = None
 
+        # Get the appropriate field data
         if field_type == 'z500' and result.z500 is not None:
             data = result.z500.ensemble_mean
             lats = result.z500.lats
             lons = result.z500.lons
+        elif field_type == 'z850' and result.z850 is not None:
+            data = result.z850.ensemble_mean
+            lats = result.z850.lats
+            lons = result.z850.lons
         elif field_type == 't850' and result.t850 is not None:
             data = result.t850.ensemble_mean - 273.15  # K to C
             lats = result.t850.lats
             lons = result.t850.lons
+        elif field_type == 't500' and result.t500 is not None:
+            data = result.t500.ensemble_mean - 273.15  # K to C
+            lats = result.t500.lats
+            lons = result.t500.lons
         elif field_type == 'slp' and result.slp is not None:
             data = result.slp.ensemble_mean
             lats = result.slp.lats
             lons = result.slp.lons
+        elif field_type == 't2m' and result.t2m is not None:
+            data = result.t2m.ensemble_mean
+            lats = result.t2m.lats
+            lons = result.t2m.lons
+        elif field_type == 'precip' and result.precip is not None:
+            data = result.precip.ensemble_mean
+            lats = result.precip.lats
+            lons = result.precip.lons
+        elif field_type == 'snow' and result.snow is not None:
+            data = result.snow.ensemble_mean
+            lats = result.snow.lats
+            lons = result.snow.lons
+        elif field_type == 'wind_10m' and result.wind_10m is not None:
+            data = result.wind_10m.ensemble_mean
+            lats = result.wind_10m.lats
+            lons = result.wind_10m.lons
+        elif field_type == 'wind_300' and result.wind_300 is not None:
+            data = result.wind_300.ensemble_mean
+            lats = result.wind_300.lats
+            lons = result.wind_300.lons
+        elif field_type == 'cape' and result.cape is not None:
+            data = result.cape.ensemble_mean
+            lats = result.cape.lats
+            lons = result.cape.lons
         elif field_type == 'spread' and result.z500 is not None:
             data = result.z500.ensemble_spread
             lats = result.z500.lats
             lons = result.z500.lons
-        else:
-            st.warning(f"Dati non disponibili per {field_type}")
+
+        if data is None:
+            st.warning(f"Dati non disponibili per {display_name}")
             return
 
         valid_time = result.valid_time.strftime("%Y-%m-%d %H:%MZ")
-        title = f"{field_type.upper()} Ensemble - Valid: {valid_time}"
+        title = f"{display_name} Ensemble - Valid: {valid_time}"
 
         fig = create_map_figure(data, lats, lons, title, field_type)
         st.pyplot(fig)
@@ -774,24 +854,44 @@ def main():
     # Time slider
     current_hour = render_time_slider(config['forecast_hours'])
 
-    # Field selector
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("Z500", use_container_width=True,
-                     type="primary" if st.session_state.selected_field == 'z500' else "secondary"):
-            st.session_state.selected_field = 'z500'
-    with col2:
-        if st.button("T850", use_container_width=True,
-                     type="primary" if st.session_state.selected_field == 't850' else "secondary"):
-            st.session_state.selected_field = 't850'
-    with col3:
-        if st.button("SLP", use_container_width=True,
-                     type="primary" if st.session_state.selected_field == 'slp' else "secondary"):
-            st.session_state.selected_field = 'slp'
-    with col4:
-        if st.button("Spread", use_container_width=True,
-                     type="primary" if st.session_state.selected_field == 'spread' else "secondary"):
-            st.session_state.selected_field = 'spread'
+    # Field selector - organized in categories
+    st.markdown("**Seleziona Campo:**")
+
+    # Row 1: Synoptic fields (upper air)
+    st.caption("Quota")
+    cols_synop = st.columns(6)
+    synop_fields = [
+        ('z500', 'Z500'),
+        ('z850', 'Z850'),
+        ('t850', 'T850'),
+        ('t500', 'T500'),
+        ('wind_300', 'Jet'),
+        ('spread', 'Spread'),
+    ]
+    for col, (field_id, label) in zip(cols_synop, synop_fields):
+        with col:
+            if st.button(label, use_container_width=True,
+                         type="primary" if st.session_state.selected_field == field_id else "secondary",
+                         key=f"btn_{field_id}"):
+                st.session_state.selected_field = field_id
+
+    # Row 2: Surface and precipitation
+    st.caption("Superficie e Precipitazioni")
+    cols_surf = st.columns(6)
+    surf_fields = [
+        ('t2m', 'T2m'),
+        ('slp', 'SLP'),
+        ('wind_10m', 'Vento'),
+        ('precip', 'Pioggia'),
+        ('snow', 'Neve'),
+        ('cape', 'CAPE'),
+    ]
+    for col, (field_id, label) in zip(cols_surf, surf_fields):
+        with col:
+            if st.button(label, use_container_width=True,
+                         type="primary" if st.session_state.selected_field == field_id else "secondary",
+                         key=f"btn_{field_id}"):
+                st.session_state.selected_field = field_id
 
     st.markdown("---")
 

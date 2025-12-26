@@ -27,6 +27,9 @@ from haem.models.meteorological import (
     PressureField,
     PressureLevel,
     ModelData,
+    SurfaceField,
+    WindField,
+    PrecipitationField,
 )
 
 logger = logging.getLogger(__name__)
@@ -197,7 +200,9 @@ class OpenMeteoFetcher:
             if hour_idx >= len(all_data.get('time', [])):
                 continue
 
-            # Interpolate sampled data to full grid
+            valid_time = run_time + timedelta(hours=hour)
+
+            # Interpolate sampled data to full grid - Core synoptic fields
             z500_grid = self._interpolate_to_grid(
                 all_data, 'geopotential_height_500hPa', hour_idx,
                 sample_lats, sample_lons, lats, lons
@@ -213,13 +218,48 @@ class OpenMeteoFetcher:
                 sample_lats, sample_lons, lats, lons
             )
 
+            t500_grid = self._interpolate_to_grid(
+                all_data, 'temperature_500hPa', hour_idx,
+                sample_lats, sample_lons, lats, lons
+            )
+
             slp_grid = self._interpolate_to_grid(
                 all_data, 'pressure_msl', hour_idx,
                 sample_lats, sample_lons, lats, lons
             )
 
-            valid_time = run_time + timedelta(hours=hour)
+            # Additional surface fields
+            t2m_grid = self._interpolate_to_grid(
+                all_data, 'temperature_2m', hour_idx,
+                sample_lats, sample_lons, lats, lons
+            )
 
+            precip_grid = self._interpolate_to_grid(
+                all_data, 'precipitation', hour_idx,
+                sample_lats, sample_lons, lats, lons
+            )
+
+            snow_grid = self._interpolate_to_grid(
+                all_data, 'snowfall', hour_idx,
+                sample_lats, sample_lons, lats, lons
+            )
+
+            wind_10m_grid = self._interpolate_to_grid(
+                all_data, 'wind_speed_10m', hour_idx,
+                sample_lats, sample_lons, lats, lons
+            )
+
+            wind_300_grid = self._interpolate_to_grid(
+                all_data, 'wind_speed_300hPa', hour_idx,
+                sample_lats, sample_lons, lats, lons
+            )
+
+            cape_grid = self._interpolate_to_grid(
+                all_data, 'cape', hour_idx,
+                sample_lats, sample_lons, lats, lons
+            )
+
+            # Store core synoptic fields
             if z500_grid is not None:
                 model_data.z500[hour] = GeopotentialField(
                     level=PressureLevel.L500,
@@ -256,6 +296,18 @@ class OpenMeteoFetcher:
                     run_time=run_time,
                 )
 
+            if t500_grid is not None:
+                model_data.t500[hour] = TemperatureField(
+                    level=PressureLevel.L500,
+                    valid_time=valid_time,
+                    forecast_hour=hour,
+                    lats=lats,
+                    lons=lons,
+                    data=t500_grid + 273.15,  # Convert C to K
+                    source_model=model,
+                    run_time=run_time,
+                )
+
             if slp_grid is not None:
                 model_data.slp[hour] = PressureField(
                     valid_time=valid_time,
@@ -263,6 +315,86 @@ class OpenMeteoFetcher:
                     lats=lats,
                     lons=lons,
                     data=slp_grid,
+                    source_model=model,
+                    run_time=run_time,
+                )
+
+            # Store additional surface fields
+            if t2m_grid is not None:
+                model_data.t2m[hour] = SurfaceField(
+                    name="temperature_2m",
+                    units="C",
+                    valid_time=valid_time,
+                    forecast_hour=hour,
+                    lats=lats,
+                    lons=lons,
+                    data=t2m_grid,  # Already in Celsius
+                    source_model=model,
+                    run_time=run_time,
+                )
+
+            if precip_grid is not None:
+                model_data.precip[hour] = PrecipitationField(
+                    name="precipitation",
+                    units="mm",
+                    valid_time=valid_time,
+                    forecast_hour=hour,
+                    lats=lats,
+                    lons=lons,
+                    data=precip_grid,
+                    source_model=model,
+                    run_time=run_time,
+                )
+
+            if snow_grid is not None:
+                model_data.snow[hour] = PrecipitationField(
+                    name="snowfall",
+                    units="cm",
+                    valid_time=valid_time,
+                    forecast_hour=hour,
+                    lats=lats,
+                    lons=lons,
+                    data=snow_grid,
+                    source_model=model,
+                    run_time=run_time,
+                )
+
+            if wind_10m_grid is not None:
+                model_data.wind_10m[hour] = WindField(
+                    name="wind_speed_10m",
+                    units="m/s",
+                    valid_time=valid_time,
+                    forecast_hour=hour,
+                    lats=lats,
+                    lons=lons,
+                    data=wind_10m_grid,
+                    source_model=model,
+                    run_time=run_time,
+                )
+
+            if wind_300_grid is not None:
+                model_data.wind_300[hour] = WindField(
+                    name="wind_speed_300hPa",
+                    units="kt",
+                    level=PressureLevel.L300,
+                    valid_time=valid_time,
+                    forecast_hour=hour,
+                    lats=lats,
+                    lons=lons,
+                    data=wind_300_grid * 1.94384,  # Convert m/s to knots
+                    source_model=model,
+                    run_time=run_time,
+                )
+
+            if cape_grid is not None:
+                model_data.cape[hour] = SurfaceField(
+                    name="cape",
+                    units="J/kg",
+                    valid_time=valid_time,
+                    forecast_hour=hour,
+                    lats=lats,
+                    lons=lons,
+                    data=cape_grid,
                     source_model=model,
                     run_time=run_time,
                 )
@@ -280,22 +412,29 @@ class OpenMeteoFetcher:
 
         session = await self._get_session()
 
-        # Variables to fetch
+        # Variables to fetch - Surface
         hourly_vars = [
             "temperature_2m",
             "pressure_msl",
             "precipitation",
+            "snowfall",
+            "snow_depth",
             "wind_speed_10m",
             "wind_direction_10m",
+            "wind_gusts_10m",
             "cape",
+            "lifted_index",
+            "freezing_level_height",
         ]
 
         # Pressure level variables
         pressure_level_vars = []
-        for level in [850, 500]:
+        for level in [850, 500, 300]:
             pressure_level_vars.extend([
                 f"temperature_{level}hPa",
                 f"geopotential_height_{level}hPa",
+                f"wind_speed_{level}hPa",
+                f"wind_direction_{level}hPa",
             ])
 
         all_vars = hourly_vars + pressure_level_vars

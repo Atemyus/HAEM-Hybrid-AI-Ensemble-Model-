@@ -304,6 +304,29 @@ class SynopticPattern(BaseModel):
         return descriptions.get(self.pattern_type, str(self.pattern_type))
 
 
+class SurfaceField(AtmosphericField):
+    """Generic surface field (temperature, wind, precipitation, etc.)."""
+
+    name: str = "surface_field"
+    units: str = ""
+    level: Optional[PressureLevel] = None
+
+
+class WindField(AtmosphericField):
+    """Wind speed field at a given level."""
+
+    name: str = "wind_speed"
+    units: str = "m/s"
+
+
+class PrecipitationField(AtmosphericField):
+    """Precipitation field (rain, snow, etc.)."""
+
+    name: str = "precipitation"
+    units: str = "mm"
+    level: Optional[PressureLevel] = None
+
+
 class ModelData(BaseModel):
     """Complete data package from a single NWP model run."""
 
@@ -324,9 +347,39 @@ class ModelData(BaseModel):
         default_factory=dict,
         description="850 hPa temperature by forecast hour"
     )
+    t500: dict[int, TemperatureField] = Field(
+        default_factory=dict,
+        description="500 hPa temperature by forecast hour"
+    )
     slp: dict[int, PressureField] = Field(
         default_factory=dict,
         description="Mean sea level pressure by forecast hour"
+    )
+
+    # Additional surface fields
+    t2m: dict[int, SurfaceField] = Field(
+        default_factory=dict,
+        description="2m temperature by forecast hour"
+    )
+    precip: dict[int, PrecipitationField] = Field(
+        default_factory=dict,
+        description="Precipitation by forecast hour"
+    )
+    snow: dict[int, PrecipitationField] = Field(
+        default_factory=dict,
+        description="Snowfall by forecast hour"
+    )
+    wind_10m: dict[int, WindField] = Field(
+        default_factory=dict,
+        description="10m wind speed by forecast hour"
+    )
+    wind_300: dict[int, WindField] = Field(
+        default_factory=dict,
+        description="300 hPa wind speed (jet stream) by forecast hour"
+    )
+    cape: dict[int, SurfaceField] = Field(
+        default_factory=dict,
+        description="CAPE by forecast hour"
     )
 
     # Identified patterns
@@ -357,7 +410,14 @@ class ModelData(BaseModel):
             "z500": self.z500,
             "z850": self.z850,
             "t850": self.t850,
+            "t500": self.t500,
             "slp": self.slp,
+            "t2m": self.t2m,
+            "precip": self.precip,
+            "snow": self.snow,
+            "wind_10m": self.wind_10m,
+            "wind_300": self.wind_300,
+            "cape": self.cape,
         }
         if field_name not in field_map:
             raise ValueError(f"Unknown field: {field_name}")
@@ -369,7 +429,14 @@ class ModelData(BaseModel):
             "z500": self.z500,
             "z850": self.z850,
             "t850": self.t850,
+            "t500": self.t500,
             "slp": self.slp,
+            "t2m": self.t2m,
+            "precip": self.precip,
+            "snow": self.snow,
+            "wind_10m": self.wind_10m,
+            "wind_300": self.wind_300,
+            "cape": self.cape,
         }
         if field_name not in field_map:
             return []
