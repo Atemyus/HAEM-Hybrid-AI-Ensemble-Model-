@@ -175,10 +175,10 @@ class OpenMeteoFetcher:
         # Open-Meteo works best with point forecasts, so we'll sample key points
         # and interpolate for the full grid
 
-        # Sample points across the domain - REDUCED to avoid rate limiting
-        # 8x10 = 80 points instead of 15x25 = 375
-        sample_lats = np.linspace(self.config.latitude_min, self.config.latitude_max, 8)
-        sample_lons = np.linspace(self.config.longitude_min, self.config.longitude_max, 10)
+        # Sample points across the domain - MINIMAL to avoid rate limiting
+        # 5x6 = 30 points total (very sparse but enough for interpolation)
+        sample_lats = np.linspace(self.config.latitude_min, self.config.latitude_max, 5)
+        sample_lons = np.linspace(self.config.longitude_min, self.config.longitude_max, 6)
 
         # Fetch data for all sample points
         all_data = await self._fetch_grid_data(om_model, sample_lats, sample_lons)
@@ -469,11 +469,11 @@ class OpenMeteoFetcher:
                         values = data['hourly'].get(var, [])
                         all_point_data[var].append(values)
 
-                # Rate limiting: 200ms delay between requests
-                await asyncio.sleep(0.2)
+                # Rate limiting: 500ms delay between requests to avoid 429
+                await asyncio.sleep(0.5)
 
-                # Log progress every 20 points
-                if (idx + 1) % 20 == 0:
+                # Log progress every 10 points
+                if (idx + 1) % 10 == 0:
                     logger.info(f"Fetched {idx + 1}/{total_points} points")
 
             except Exception as e:
