@@ -704,6 +704,9 @@ def main():
     # Sidebar
     config = render_sidebar()
 
+    # Auto-start on first load (no need to click button)
+    first_load = st.session_state.last_update is None and not st.session_state.analysis_complete
+
     # Check for auto-refresh based on synoptic schedule
     should_refresh = False
     if config['auto_refresh'] and st.session_state.last_update:
@@ -729,8 +732,8 @@ def main():
                 synoptic_run = (avail_hour - 4) % 24
                 st.info(f"🔄 Nuova uscita sinottica {synoptic_run:02d}Z disponibile! Aggiornamento in corso...")
 
-    # Main content area
-    if config['run_analysis'] or should_refresh:
+    # Main content area - auto-start on first load, manual button, or auto-refresh
+    if first_load or config['run_analysis'] or should_refresh:
         with st.spinner("🔄 Scaricando dati meteorologici da Open-Meteo..."):
             try:
                 # Run async data fetching
