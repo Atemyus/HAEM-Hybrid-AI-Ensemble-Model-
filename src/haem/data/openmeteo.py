@@ -175,9 +175,10 @@ class OpenMeteoFetcher:
         # Open-Meteo works best with point forecasts, so we'll sample key points
         # and interpolate for the full grid
 
-        # Sample points across the domain
-        sample_lats = np.linspace(self.config.latitude_min, self.config.latitude_max, 15)
-        sample_lons = np.linspace(self.config.longitude_min, self.config.longitude_max, 25)
+        # Sample points across the domain - REDUCED to avoid rate limiting
+        # 8x10 = 80 points instead of 15x25 = 375
+        sample_lats = np.linspace(self.config.latitude_min, self.config.latitude_max, 8)
+        sample_lons = np.linspace(self.config.longitude_min, self.config.longitude_max, 10)
 
         # Fetch data for all sample points
         all_data = await self._fetch_grid_data(om_model, sample_lats, sample_lons)
@@ -452,8 +453,9 @@ class OpenMeteoFetcher:
                 task = self._fetch_point(session, model, lat, lon, all_vars)
                 tasks.append((lat, lon, task))
 
-        # Execute with rate limiting
-        for lat, lon, task in tasks:
+        # Execute sequentially with rate limiting to avoid 429 errors
+        total_points = len(tasks)
+        for idx, (lat, lon, task) in enumerate(tasks):
             try:
                 data = await task
                 if data and 'hourly' in data:
@@ -467,8 +469,12 @@ class OpenMeteoFetcher:
                         values = data['hourly'].get(var, [])
                         all_point_data[var].append(values)
 
-                # Small delay to avoid rate limiting
-                await asyncio.sleep(0.05)
+                # Rate limiting: 200ms delay between requests
+                await asyncio.sleep(0.2)
+
+                # Log progress every 20 points
+                if (idx + 1) % 20 == 0:
+                    logger.info(f"Fetched {idx + 1}/{total_points} points")
 
             except Exception as e:
                 logger.warning(f"Failed to fetch point ({lat}, {lon}): {e}")
@@ -482,8 +488,9 @@ class OpenMeteoFetcher:
         lat: float,
         lon: float,
         variables: list[str],
+        max_retries: int = 3,
     ) -> Optional[dict]:
-        """Fetch data for a single point."""
+        """Fetch data for a single point with retry logic."""
 
         params = {
             "latitude": lat,
@@ -493,16 +500,28 @@ class OpenMeteoFetcher:
             "forecast_days": self.config.forecast_days,
         }
 
-        try:
-            async with session.get(self.config.base_url, params=params) as response:
-                if response.status == 200:
-                    return await response.json()
-                else:
-                    logger.warning(f"API returned {response.status} for ({lat}, {lon})")
-                    return None
-        except Exception as e:
-            logger.error(f"Request failed for ({lat}, {lon}): {e}")
-            return None
+        for attempt in range(max_retries):
+            try:
+                async with session.get(self.config.base_url, params=params) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    elif response.status == 429:
+                        # Rate limited - wait and retry with exponential backoff
+                        wait_time = (2 ** attempt) * 2  # 2, 4, 8 seconds
+                        logger.warning(f"Rate limited for ({lat}, {lon}), waiting {wait_time}s...")
+                        await asyncio.sleep(wait_time)
+                        continue
+                    else:
+                        logger.warning(f"API returned {response.status} for ({lat}, {lon})")
+                        return None
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                logger.error(f"Request failed for ({lat}, {lon}): {e}")
+                return None
+
+        return None
 
     def _interpolate_to_grid(
         self,
