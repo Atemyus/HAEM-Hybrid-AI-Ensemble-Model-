@@ -7,7 +7,7 @@ with multi-AI interpretation.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 import io
@@ -46,6 +46,46 @@ app_config = get_app_config()
 # ============================================================================
 # DATA FETCHING AND ANALYSIS
 # ============================================================================
+
+def get_current_synoptic_run() -> str:
+    """Get the current synoptic run identifier for cache key."""
+    now = datetime.utcnow()
+    # Data is available ~4 hours after run
+    available_time = now - timedelta(hours=4)
+    run_hour = (available_time.hour // 6) * 6
+    run_date = available_time.date()
+    return f"{run_date.isoformat()}_{run_hour:02d}Z"
+
+
+@st.cache_data(ttl=3600, show_spinner=False)  # 1 hour TTL
+def fetch_weather_data_cached(models_tuple: tuple, forecast_hours_tuple: tuple, synoptic_run: str):
+    """
+    Fetch weather data with Streamlit caching.
+
+    The synoptic_run parameter ensures cache is invalidated when new model data is available.
+    """
+    models = list(models_tuple)
+    forecast_hours = list(forecast_hours_tuple)
+
+    config = OpenMeteoConfig(
+        latitude_min=35.0,
+        latitude_max=65.0,
+        longitude_min=-15.0,
+        longitude_max=30.0,
+        grid_resolution=1.0,  # Faster with coarser grid
+        forecast_days=7,
+    )
+    fetcher = MultiModelOpenMeteoFetcher(models=models, config=config)
+
+    # Run async in sync context
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        result = loop.run_until_complete(fetcher.fetch_all_models(forecast_hours=forecast_hours))
+        return result
+    finally:
+        loop.close()
+
 
 async def fetch_weather_data(models: list[NWPModel], forecast_hours: list[int]):
     """Fetch weather data from Open-Meteo for all selected models."""
@@ -823,62 +863,62 @@ def main():
                 synoptic_run = (avail_hour - 4) % 24
                 st.info(f"🔄 Nuova uscita sinottica {synoptic_run:02d}Z disponibile! Aggiornamento in corso...")
 
-    # Check if we can use cached data (only on first load, not on manual refresh)
-    use_cache = first_load and not config['run_analysis'] and not should_refresh
-    cached_data = None
+    # Get current synoptic run identifier for cache key
+    current_run = get_current_synoptic_run()
 
-    if use_cache:
-        cached_data = dashboard_cache.get()
-        if cached_data:
-            st.session_state.model_data = cached_data['model_data']
-            st.session_state.ensemble_results = cached_data['ensemble_results']
-            st.session_state.analysis_complete = True
-            st.session_state.last_update = datetime.utcnow()
-            cache_info = dashboard_cache.get_info()
-            if cache_info:
-                st.success(f"✅ Dati caricati dalla cache (run {cache_info.get('synoptic_run', 'N/A')[:16]})")
+    # Determine if we should fetch data
+    # - On first load, try to use Streamlit's cache (automatic)
+    # - Manual button press forces a refresh
+    # - Auto-refresh when new synoptic data is available
+    force_refresh = config['run_analysis'] or should_refresh
 
-    # Main content area - fetch new data if needed
-    if (first_load and not cached_data) or config['run_analysis'] or should_refresh:
-        with st.spinner("🔄 Scaricando dati meteorologici da Open-Meteo..."):
-            try:
-                # Run async data fetching
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+    # Main content area - fetch data (uses Streamlit cache automatically)
+    if first_load or force_refresh:
+        try:
+            # Convert to tuples for caching (lists are not hashable)
+            models_tuple = tuple(config['models'])
+            hours_tuple = tuple(config['forecast_hours'])
 
-                # Fetch weather data
-                st.info("📡 Collegamento a Open-Meteo API...")
-                model_data = loop.run_until_complete(
-                    fetch_weather_data(config['models'], config['forecast_hours'])
-                )
+            # Use the synoptic run as cache key - this invalidates cache when new data is available
+            cache_key = current_run if not force_refresh else f"{current_run}_{datetime.utcnow().timestamp()}"
+
+            with st.spinner("🔄 Caricamento dati meteorologici..."):
+                # This uses Streamlit's @st.cache_data - returns cached data if available
+                model_data = fetch_weather_data_cached(models_tuple, hours_tuple, cache_key)
                 st.session_state.model_data = model_data
 
                 # Compute ensemble
-                st.info("🔢 Calcolo ensemble multi-modello...")
                 ensemble_results = {}
                 for hour in config['forecast_hours']:
                     ensemble_results[hour] = compute_ensemble(model_data, hour)
                 st.session_state.ensemble_results = ensemble_results
 
-                # Save to cache
+                # Also save to file cache as backup
                 dashboard_cache.save(model_data, ensemble_results)
 
                 # Run AI analysis if providers are configured
                 if config['ai_configs']:
-                    st.info("🤖 Esecuzione analisi AI...")
-                    ai_analyses = loop.run_until_complete(
-                        run_ai_analysis(model_data, config['ai_configs'], st.session_state.current_hour)
-                    )
-                    st.session_state.ai_analyses = ai_analyses
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        ai_analyses = loop.run_until_complete(
+                            run_ai_analysis(model_data, config['ai_configs'], st.session_state.current_hour)
+                        )
+                        st.session_state.ai_analyses = ai_analyses
+                    finally:
+                        loop.close()
 
-                loop.close()
                 st.session_state.analysis_complete = True
                 st.session_state.last_update = datetime.utcnow()
-                st.success(f"✅ Analisi completata! Dati da {len(model_data)} modelli.")
 
-            except Exception as e:
-                st.error(f"❌ Errore durante l'analisi: {str(e)}")
-                logger.exception("Analysis failed")
+                if force_refresh:
+                    st.success(f"✅ Analisi completata! Dati da {len(model_data)} modelli.")
+                else:
+                    st.success(f"✅ Dati caricati (run sinottica: {current_run})")
+
+        except Exception as e:
+            st.error(f"❌ Errore durante l'analisi: {str(e)}")
+            logger.exception("Analysis failed")
 
     # Time slider
     current_hour = render_time_slider(config['forecast_hours'])
