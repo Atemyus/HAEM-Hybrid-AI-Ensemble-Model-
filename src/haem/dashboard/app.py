@@ -140,8 +140,8 @@ async def fetch_weather_data(models: list[NWPModel], forecast_hours: list[int]):
     return await fetcher.fetch_all_models(forecast_hours=forecast_hours)
 
 
-async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], forecast_hour: int, selected_field: str = "z500"):
-    """Run AI analysis on the weather data for a specific field and hour."""
+async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], forecast_hour: int, selected_field: str = "z500", preset: str = "Analisi Sinottica"):
+    """Run AI analysis on the weather data for a specific field, hour, and preset context."""
     if not ai_configs:
         return {}
 
@@ -162,6 +162,15 @@ async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], 
         'cape': 'CAPE - indica energia disponibile per convezione',
         'spread': 'Spread ensemble - indica incertezza tra i modelli',
     }
+
+    # Preset descriptions for AI context
+    preset_descriptions = {
+        'Analisi Sinottica': 'Analisi sinottica: focus su pattern di larga scala, saccature, promontori, fronti e circolazione generale',
+        'Analisi Convettiva': 'Analisi convettiva: focus su temporali, CAPE, wind shear, lifting mechanisms e severe weather',
+        'Meteo Invernale': 'Meteo invernale: focus su neve, quota neve, isoterme, inversioni termiche e precipitazioni solide',
+        'Completo': 'Analisi completa: valutazione integrata di tutti i parametri meteorologici',
+    }
+    preset_context = preset_descriptions.get(preset, preset)
 
     # Prepare comprehensive data summary for AI
     data_summary = {}
@@ -217,6 +226,7 @@ async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], 
         forecast_hour=forecast_hour,
         selected_field=selected_field,
         field_description=field_descriptions.get(selected_field, selected_field),
+        preset_context=preset_context,
     )
 
     # Convert to dict format for display
@@ -314,6 +324,8 @@ def init_session_state():
         st.session_state.last_update = None
     if 'auto_refresh' not in st.session_state:
         st.session_state.auto_refresh = False
+    if 'last_ai_preset' not in st.session_state:
+        st.session_state.last_ai_preset = None
 
 
 # ============================================================================
@@ -471,6 +483,7 @@ def render_sidebar():
     return {
         'models': selected_models,
         'field_selection': field_selection,
+        'field_preset': field_preset,  # Added for AI re-analysis trigger
         'ai_configs': ai_configs,
         'forecast_hours': forecast_hours,
         'run_analysis': run_analysis,
@@ -1035,12 +1048,14 @@ def main():
                                 model_data,
                                 config['ai_configs'],
                                 st.session_state.current_hour,
-                                selected_field=st.session_state.selected_field
+                                selected_field=st.session_state.selected_field,
+                                preset=config['field_preset']
                             )
                         )
                         st.session_state.ai_analyses = ai_analyses
                         st.session_state.last_ai_hour = st.session_state.current_hour
                         st.session_state.last_ai_field = st.session_state.selected_field
+                        st.session_state.last_ai_preset = config['field_preset']
                     finally:
                         loop.close()
 
@@ -1100,21 +1115,25 @@ def main():
 
     st.markdown("---")
 
-    # Check if we need to re-run AI analysis (hour or field changed)
+    # Check if we need to re-run AI analysis (hour, field, or preset changed)
     need_ai_reanalysis = False
     if 'last_ai_hour' not in st.session_state:
         st.session_state.last_ai_hour = None
     if 'last_ai_field' not in st.session_state:
         st.session_state.last_ai_field = None
+    if 'last_ai_preset' not in st.session_state:
+        st.session_state.last_ai_preset = None
 
-    # Detect changes
+    # Detect changes (hour, field, or preset)
+    current_preset = config['field_preset']
     if (st.session_state.last_ai_hour != current_hour or
-        st.session_state.last_ai_field != st.session_state.selected_field):
+        st.session_state.last_ai_field != st.session_state.selected_field or
+        st.session_state.last_ai_preset != current_preset):
         need_ai_reanalysis = True
 
     # Re-run AI analysis if needed and we have data
     if need_ai_reanalysis and st.session_state.model_data and config['ai_configs']:
-        with st.spinner(f"🤖 Aggiornamento analisi AI per {st.session_state.selected_field.upper()} +{current_hour}h..."):
+        with st.spinner(f"🤖 Aggiornamento analisi AI per {st.session_state.selected_field.upper()} +{current_hour}h ({current_preset})..."):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -1123,12 +1142,14 @@ def main():
                         st.session_state.model_data,
                         config['ai_configs'],
                         current_hour,
-                        selected_field=st.session_state.selected_field
+                        selected_field=st.session_state.selected_field,
+                        preset=current_preset
                     )
                 )
                 st.session_state.ai_analyses = ai_analyses
                 st.session_state.last_ai_hour = current_hour
                 st.session_state.last_ai_field = st.session_state.selected_field
+                st.session_state.last_ai_preset = current_preset
             except Exception as e:
                 st.error(f"Errore nell'analisi AI: {e}")
             finally:

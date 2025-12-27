@@ -233,6 +233,7 @@ class BaseAIAnalyzer(ABC):
         forecast_hour: int,
         selected_field: str = "z500",
         field_description: str = "",
+        preset_context: str = "",
     ) -> AIAnalysisResult:
         """Perform meteorological analysis."""
         pass
@@ -244,8 +245,9 @@ class BaseAIAnalyzer(ABC):
         forecast_hour: int,
         selected_field: str = "z500",
         field_description: str = "",
+        preset_context: str = "",
     ) -> str:
-        """Build the analysis prompt for the AI with field-specific context."""
+        """Build the analysis prompt for the AI with field-specific and preset context."""
 
         # Format model data for display
         data_str = ""
@@ -255,8 +257,13 @@ class BaseAIAnalyzer(ABC):
                 for key, val in stats.items():
                     data_str += f"  - {key}: {val:.1f}\n"
 
-        prompt = f"""Sei un meteorologo esperto. Analizza i seguenti dati dei modelli NWP e fornisci una valutazione meteorologica dettagliata IN ITALIANO.
+        # Build preset-specific instructions
+        preset_instructions = ""
+        if preset_context:
+            preset_instructions = f"\n**CONTESTO ANALISI**: {preset_context}\n"
 
+        prompt = f"""Sei un meteorologo esperto. Analizza i seguenti dati dei modelli NWP e fornisci una valutazione meteorologica dettagliata IN ITALIANO.
+{preset_instructions}
 ## Dati Analizzati
 - **Campo Selezionato**: {selected_field.upper()} - {field_description}
 - **Ora di Previsione**: +{forecast_hour}h
@@ -615,12 +622,14 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
         forecast_hour: int,
         selected_field: str = "z500",
         field_description: str = "",
+        preset_context: str = "",
     ) -> AIAnalysisResult:
         """Analyze weather data using AIML API."""
         start_time = time.time()
         prompt = self._build_analysis_prompt(
             model_data, field_selection, forecast_hour,
-            selected_field=selected_field, field_description=field_description
+            selected_field=selected_field, field_description=field_description,
+            preset_context=preset_context
         )
 
         try:
@@ -770,6 +779,7 @@ class MultiAIOrchestrator:
         forecast_hour: int,
         selected_field: str = "z500",
         field_description: str = "",
+        preset_context: str = "",
     ) -> list[AIAnalysisResult]:
         """Run analysis on all configured AI providers in parallel."""
         tasks = []
@@ -781,6 +791,7 @@ class MultiAIOrchestrator:
                 forecast_hour,
                 selected_field=selected_field,
                 field_description=field_description,
+                preset_context=preset_context,
             )
             tasks.append(task)
 
