@@ -23,7 +23,13 @@ except ImportError:
 class APIKeys(BaseModel):
     """API Keys configuration loaded from environment."""
 
-    # AI Providers
+    # AIML API (unified access to all models)
+    aiml_api_key: Optional[str] = Field(
+        default=None,
+        description="AIML API key for unified access to all AI models"
+    )
+
+    # Individual AI Providers (fallback if no AIML API)
     anthropic_api_key: Optional[str] = Field(
         default=None,
         description="Anthropic API key for Claude"
@@ -41,29 +47,63 @@ class APIKeys(BaseModel):
     def from_env(cls) -> "APIKeys":
         """Load API keys from environment variables."""
         return cls(
+            aiml_api_key=os.getenv("AIML_API_KEY"),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             google_api_key=os.getenv("GOOGLE_API_KEY"),
         )
 
     @property
+    def has_aiml_api(self) -> bool:
+        """Check if AIML API key is available (enables all providers)."""
+        return bool(self.aiml_api_key)
+
+    @property
     def has_claude(self) -> bool:
-        """Check if Claude API key is available."""
-        return bool(self.anthropic_api_key)
+        """Check if Claude is available."""
+        return self.has_aiml_api or bool(self.anthropic_api_key)
 
     @property
     def has_gpt4(self) -> bool:
-        """Check if GPT-4 API key is available."""
-        return bool(self.openai_api_key)
+        """Check if GPT-4 is available."""
+        return self.has_aiml_api or bool(self.openai_api_key)
+
+    @property
+    def has_gpt5(self) -> bool:
+        """Check if GPT-5 is available (via AIML API)."""
+        return self.has_aiml_api
 
     @property
     def has_gemini(self) -> bool:
-        """Check if Gemini API key is available."""
-        return bool(self.google_api_key)
+        """Check if Gemini is available."""
+        return self.has_aiml_api or bool(self.google_api_key)
+
+    @property
+    def has_qwen(self) -> bool:
+        """Check if Qwen is available (via AIML API)."""
+        return self.has_aiml_api
+
+    @property
+    def has_deepseek(self) -> bool:
+        """Check if Deepseek is available (via AIML API)."""
+        return self.has_aiml_api
+
+    @property
+    def has_glm(self) -> bool:
+        """Check if GLM is available (via AIML API)."""
+        return self.has_aiml_api
+
+    @property
+    def has_grok(self) -> bool:
+        """Check if Grok is available (via AIML API)."""
+        return self.has_aiml_api
 
     @property
     def available_providers(self) -> list[str]:
         """List of available AI providers."""
+        if self.has_aiml_api:
+            return ["Claude", "GPT-5", "Gemini", "Qwen", "Deepseek", "GLM", "Grok"]
+
         providers = []
         if self.has_claude:
             providers.append("Claude")
@@ -77,23 +117,36 @@ class APIKeys(BaseModel):
         """Get a summary of API key status."""
         lines = ["API Keys Status:", ""]
 
-        # Claude
-        status = "✅ Configured" if self.has_claude else "❌ Not set"
-        lines.append(f"  Anthropic (Claude): {status}")
-
-        # OpenAI
-        status = "✅ Configured" if self.has_gpt4 else "❌ Not set"
-        lines.append(f"  OpenAI (GPT-4):     {status}")
-
-        # Google
-        status = "✅ Configured" if self.has_gemini else "❌ Not set"
-        lines.append(f"  Google (Gemini):    {status}")
-
-        lines.append("")
-        if self.available_providers:
-            lines.append(f"  Available: {', '.join(self.available_providers)}")
+        if self.has_aiml_api:
+            lines.append("  AIML API: ✅ Configured (all providers available)")
+            lines.append("")
+            lines.append("  Available via AIML API:")
+            lines.append("    - Claude 4.5 Opus")
+            lines.append("    - GPT-5 Pro")
+            lines.append("    - Gemini 3 Pro")
+            lines.append("    - Qwen Max")
+            lines.append("    - Deepseek V3.2")
+            lines.append("    - GLM 4.7")
+            lines.append("    - Grok 4.1 Fast")
         else:
-            lines.append("  ⚠️ No AI providers configured - using demo mode")
+            # Claude
+            status = "✅ Configured" if bool(self.anthropic_api_key) else "❌ Not set"
+            lines.append(f"  Anthropic (Claude): {status}")
+
+            # OpenAI
+            status = "✅ Configured" if bool(self.openai_api_key) else "❌ Not set"
+            lines.append(f"  OpenAI (GPT-4):     {status}")
+
+            # Google
+            status = "✅ Configured" if bool(self.google_api_key) else "❌ Not set"
+            lines.append(f"  Google (Gemini):    {status}")
+
+            lines.append("")
+            if self.available_providers:
+                lines.append(f"  Available: {', '.join(self.available_providers)}")
+            else:
+                lines.append("  ⚠️ No AI providers configured - using demo mode")
+                lines.append("  💡 Tip: Set AIML_API_KEY for access to all models")
 
         return "\n".join(lines)
 

@@ -1,12 +1,14 @@
 """
 AI Provider Configuration for HAEM.
 
-Supports multiple AI providers for meteorological analysis:
+Supports multiple AI providers for meteorological analysis via AIML API:
 - Claude (Anthropic)
-- GPT-4 (OpenAI)
+- GPT-4/5 (OpenAI)
 - Gemini (Google)
-- Mistral
-- Local LLMs (Ollama)
+- Qwen (Alibaba)
+- Deepseek
+- GLM (Zhipu)
+- Grok (xAI)
 
 Each AI performs independent analysis, then results are weighted
 and combined in the ensemble.
@@ -14,6 +16,8 @@ and combined in the ensemble.
 
 import asyncio
 import logging
+import os
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,6 +28,9 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+# AIML API Configuration
+AIML_API_BASE_URL = "https://api.aimlapi.com/v1"
+
 
 class AIProvider(str, Enum):
     """Supported AI providers."""
@@ -31,41 +38,53 @@ class AIProvider(str, Enum):
     CLAUDE = "claude"           # Anthropic Claude
     GPT4 = "gpt4"               # OpenAI GPT-4
     GPT4O = "gpt4o"             # OpenAI GPT-4o
+    GPT5 = "gpt5"               # OpenAI GPT-5 Pro
     GEMINI = "gemini"           # Google Gemini
     GEMINI_PRO = "gemini_pro"   # Google Gemini Pro
+    QWEN = "qwen"               # Alibaba Qwen Max
+    DEEPSEEK = "deepseek"       # Deepseek
+    GLM = "glm"                 # Zhipu GLM
+    GROK = "grok"               # xAI Grok
     MISTRAL = "mistral"         # Mistral AI
-    LLAMA = "llama"             # Meta Llama (via Ollama)
-    QWEN = "qwen"               # Alibaba Qwen (via Ollama)
+    LLAMA = "llama"             # Meta Llama
     LOCAL = "local"             # Generic local LLM
 
     @property
     def full_name(self) -> str:
         """Full name of the provider."""
         names = {
-            "claude": "Anthropic Claude",
+            "claude": "Claude 4.5 Opus",
             "gpt4": "OpenAI GPT-4",
             "gpt4o": "OpenAI GPT-4o",
+            "gpt5": "GPT-5 Pro",
             "gemini": "Google Gemini",
-            "gemini_pro": "Google Gemini Pro",
+            "gemini_pro": "Gemini 3 Pro",
+            "qwen": "Qwen Max",
+            "deepseek": "Deepseek V3.2",
+            "glm": "GLM 4.7",
+            "grok": "Grok 4.1 Fast",
             "mistral": "Mistral AI",
             "llama": "Meta Llama",
-            "qwen": "Alibaba Qwen",
             "local": "Local LLM",
         }
         return names.get(self.value, self.value)
 
     @property
     def default_model(self) -> str:
-        """Default model ID for this provider."""
+        """Default model ID for this provider (AIML API model names)."""
         models = {
-            "claude": "claude-sonnet-4-20250514",
-            "gpt4": "gpt-4-turbo",
-            "gpt4o": "gpt-4o",
-            "gemini": "gemini-2.0-flash-exp",
-            "gemini_pro": "gemini-1.5-pro-latest",
-            "mistral": "mistral-large-latest",
-            "llama": "llama3.1:70b",
-            "qwen": "qwen2.5:72b",
+            "claude": "anthropic/claude-4-opus-20250514",
+            "gpt4": "openai/gpt-4-turbo",
+            "gpt4o": "openai/gpt-4o",
+            "gpt5": "openai/o3",
+            "gemini": "google/gemini-2.0-flash",
+            "gemini_pro": "google/gemini-2.5-pro-preview-06-05",
+            "qwen": "Qwen/Qwen3-235B-A22B",
+            "deepseek": "deepseek/DeepSeek-R1",
+            "glm": "THUDM/GLM-4-32B-0414",
+            "grok": "x-ai/grok-3-fast",
+            "mistral": "mistralai/mistral-large-latest",
+            "llama": "meta-llama/Llama-4-Scout-17B-16E-Instruct",
             "local": "llama3.1:8b",
         }
         return models.get(self.value, "")
@@ -90,6 +109,11 @@ class AIProvider(str, Enum):
                 "Multimodal capabilities",
                 "Good for map interpretation",
             ],
+            "gpt5": [
+                "State-of-the-art reasoning",
+                "Advanced scientific analysis",
+                "Superior pattern recognition",
+            ],
             "gemini": [
                 "Fast processing",
                 "Good for large contexts",
@@ -100,15 +124,35 @@ class AIProvider(str, Enum):
                 "Long context window",
                 "Strong scientific knowledge",
             ],
+            "qwen": [
+                "Strong multilingual",
+                "Excellent reasoning",
+                "Good scientific knowledge",
+            ],
+            "deepseek": [
+                "Advanced thinking/reasoning",
+                "Strong analytical capabilities",
+                "Good for complex problems",
+            ],
+            "glm": [
+                "Fast inference",
+                "Good general knowledge",
+                "Cost-effective",
+            ],
+            "grok": [
+                "Fast reasoning",
+                "Real-time knowledge",
+                "Strong analytical skills",
+            ],
             "mistral": [
                 "Efficient processing",
                 "Good European focus",
                 "Cost-effective",
             ],
             "llama": [
-                "Local deployment",
-                "No API costs",
+                "Open source",
                 "Customizable",
+                "Good general purpose",
             ],
         }
         return strengths.get(self.value, ["General purpose"])
@@ -533,32 +577,160 @@ class GeminiAnalyzer(BaseAIAnalyzer):
         return result
 
 
+class AIMLAPIAnalyzer(BaseAIAnalyzer):
+    """
+    Unified analyzer using AIML API for all providers.
+
+    AIML API provides access to multiple AI models through a single
+    OpenAI-compatible endpoint.
+    """
+
+    async def analyze(
+        self,
+        model_data: dict[str, Any],
+        field_selection: list[str],
+        forecast_hour: int,
+    ) -> AIAnalysisResult:
+        """Analyze weather data using AIML API."""
+        start_time = time.time()
+        prompt = self._build_analysis_prompt(model_data, field_selection, forecast_hour)
+
+        try:
+            from openai import OpenAI
+
+            api_key = self.config.api_key or os.getenv("AIML_API_KEY")
+            if not api_key:
+                raise ValueError("AIML_API_KEY not configured")
+
+            client = OpenAI(
+                api_key=api_key,
+                base_url=AIML_API_BASE_URL,
+            )
+
+            response = client.chat.completions.create(
+                model=self.config.effective_model,
+                max_tokens=self.config.max_tokens,
+                temperature=self.config.temperature,
+                messages=[
+                    {"role": "system", "content": "Sei un meteorologo esperto. Analizza i dati in italiano."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+
+            response_text = response.choices[0].message.content
+            inference_time = (time.time() - start_time) * 1000
+
+            # Parse response
+            parsed = self._parse_response(response_text)
+
+            return AIAnalysisResult(
+                provider=self.provider,
+                model_id=self.config.effective_model,
+                timestamp=datetime.utcnow(),
+                synoptic_summary=parsed.get("synoptic_summary", response_text[:500]),
+                pattern_identification=parsed.get("patterns", ["Analisi completata"]),
+                physical_interpretation=parsed.get("physics", ""),
+                confidence_assessment=parsed.get("confidence_text", ""),
+                key_findings=parsed.get("findings", []),
+                warnings=parsed.get("warnings", []),
+                confidence_score=parsed.get("confidence_score", 75.0),
+                reasoning_quality=0.85,
+                raw_response=response_text,
+                inference_time_ms=inference_time,
+            )
+
+        except Exception as e:
+            logger.error(f"{self.provider.full_name} analysis failed: {e}")
+            inference_time = (time.time() - start_time) * 1000
+            return AIAnalysisResult(
+                provider=self.provider,
+                model_id=self.config.effective_model,
+                timestamp=datetime.utcnow(),
+                synoptic_summary=f"Errore: {str(e)}",
+                pattern_identification=[],
+                physical_interpretation="",
+                confidence_assessment="",
+                key_findings=[],
+                warnings=[f"Errore: {str(e)}"],
+                confidence_score=0.0,
+                reasoning_quality=0.0,
+                inference_time_ms=inference_time,
+            )
+
+    def _parse_response(self, text: str) -> dict:
+        """Parse the AI response."""
+        result = {
+            "synoptic_summary": text[:800],
+            "patterns": [],
+            "physics": "",
+            "confidence_text": "",
+            "confidence_score": 75.0,
+            "findings": [],
+            "warnings": []
+        }
+
+        sections = text.split("##")
+        for section in sections:
+            lower = section.lower()
+            if "sinott" in lower or "synoptic" in lower:
+                result["synoptic_summary"] = section.strip()[:800]
+            elif "pattern" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["patterns"] = [l.lstrip("- ") for l in lines[:5]]
+            elif "fisic" in lower or "physical" in lower:
+                result["physics"] = section.strip()[:600]
+            elif "confiden" in lower or "incertezz" in lower:
+                result["confidence_text"] = section.strip()[:400]
+            elif "finding" in lower or "conclus" in lower:
+                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
+                result["findings"] = [l.lstrip("- ") for l in lines[:5]]
+
+        return result
+
+
 class MultiAIOrchestrator:
     """
     Orchestrates analysis across multiple AI providers.
 
     Runs analyses in parallel and combines results with weighting.
+    Uses AIML API as unified backend when AIML_API_KEY is configured.
     """
 
     def __init__(self, configs: list[AIProviderConfig]):
         self.configs = [c for c in configs if c.enabled]
+        self.use_aiml_api = bool(os.getenv("AIML_API_KEY"))
         self.analyzers = self._create_analyzers()
 
     def _create_analyzers(self) -> dict[AIProvider, BaseAIAnalyzer]:
         """Create analyzer instances for each configured provider."""
+        # If AIML API key is set, use it for all providers
+        if self.use_aiml_api:
+            logger.info("Using AIML API for all AI providers")
+            analyzers = {}
+            for config in self.configs:
+                analyzers[config.provider] = AIMLAPIAnalyzer(config)
+            return analyzers
+
+        # Otherwise, use native APIs
         analyzer_classes = {
             AIProvider.CLAUDE: ClaudeAnalyzer,
             AIProvider.GPT4: GPT4Analyzer,
             AIProvider.GPT4O: GPT4Analyzer,
+            AIProvider.GPT5: GPT4Analyzer,  # Uses OpenAI API
             AIProvider.GEMINI: GeminiAnalyzer,
             AIProvider.GEMINI_PRO: GeminiAnalyzer,
-            AIProvider.MISTRAL: BaseAIAnalyzer,  # Would need implementation
+            AIProvider.QWEN: AIMLAPIAnalyzer,
+            AIProvider.DEEPSEEK: AIMLAPIAnalyzer,
+            AIProvider.GLM: AIMLAPIAnalyzer,
+            AIProvider.GROK: AIMLAPIAnalyzer,
+            AIProvider.MISTRAL: AIMLAPIAnalyzer,
+            AIProvider.LLAMA: AIMLAPIAnalyzer,
         }
 
         analyzers = {}
         for config in self.configs:
             analyzer_class = analyzer_classes.get(config.provider)
-            if analyzer_class and analyzer_class != BaseAIAnalyzer:
+            if analyzer_class:
                 analyzers[config.provider] = analyzer_class(config)
 
         return analyzers

@@ -315,32 +315,57 @@ def render_sidebar():
 
     # Show API key status
     with st.sidebar.expander("API Keys Status"):
-        if api_keys.has_claude:
-            st.success("Claude: Configurato")
+        if api_keys.has_aiml_api:
+            st.success("🔑 AIML API: Configurato")
+            st.info("Tutti i provider AI disponibili!")
         else:
-            st.warning("Claude: Non configurato")
-        if api_keys.has_gpt4:
-            st.success("GPT-4: Configurato")
-        else:
-            st.warning("GPT-4: Non configurato")
-        if api_keys.has_gemini:
-            st.success("Gemini: Configurato")
-        else:
-            st.warning("Gemini: Non configurato")
+            if api_keys.has_claude:
+                st.success("Claude: Configurato")
+            else:
+                st.warning("Claude: Non configurato")
+            if api_keys.has_gpt4:
+                st.success("GPT-4: Configurato")
+            else:
+                st.warning("GPT-4: Non configurato")
+            if api_keys.has_gemini:
+                st.success("Gemini: Configurato")
+            else:
+                st.warning("Gemini: Non configurato")
 
-        if not api_keys.available_providers:
-            st.info("Modalita demo attiva")
+            if not api_keys.available_providers:
+                st.info("Modalita demo attiva")
+                st.caption("💡 Configura AIML_API_KEY per accedere a tutti i modelli")
 
-    # Only show enabled providers
-    if api_keys.has_claude:
-        if st.sidebar.checkbox("Claude (Anthropic)", value=True):
+    # Show available providers based on AIML API or individual keys
+    if api_keys.has_aiml_api:
+        # All providers available via AIML API
+        st.sidebar.caption("Seleziona i modelli AI da usare:")
+
+        if st.sidebar.checkbox("Claude 4.5 Opus", value=True, key="ai_claude"):
             ai_configs.append(AIProviderConfig(provider=AIProvider.CLAUDE))
-    if api_keys.has_gpt4:
-        if st.sidebar.checkbox("GPT-4 (OpenAI)", value=True):
-            ai_configs.append(AIProviderConfig(provider=AIProvider.GPT4))
-    if api_keys.has_gemini:
-        if st.sidebar.checkbox("Gemini (Google)", value=True):
-            ai_configs.append(AIProviderConfig(provider=AIProvider.GEMINI))
+        if st.sidebar.checkbox("GPT-5 Pro", value=True, key="ai_gpt5"):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.GPT5))
+        if st.sidebar.checkbox("Gemini 3 Pro", value=True, key="ai_gemini"):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.GEMINI_PRO))
+        if st.sidebar.checkbox("Qwen Max", value=True, key="ai_qwen"):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.QWEN))
+        if st.sidebar.checkbox("Deepseek V3.2", value=True, key="ai_deepseek"):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.DEEPSEEK))
+        if st.sidebar.checkbox("GLM 4.7", value=False, key="ai_glm"):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.GLM))
+        if st.sidebar.checkbox("Grok 4.1 Fast", value=False, key="ai_grok"):
+            ai_configs.append(AIProviderConfig(provider=AIProvider.GROK))
+    else:
+        # Only show individually configured providers
+        if api_keys.has_claude:
+            if st.sidebar.checkbox("Claude (Anthropic)", value=True, key="ai_claude"):
+                ai_configs.append(AIProviderConfig(provider=AIProvider.CLAUDE))
+        if api_keys.has_gpt4:
+            if st.sidebar.checkbox("GPT-4 (OpenAI)", value=True, key="ai_gpt4"):
+                ai_configs.append(AIProviderConfig(provider=AIProvider.GPT4))
+        if api_keys.has_gemini:
+            if st.sidebar.checkbox("Gemini (Google)", value=True, key="ai_gemini"):
+                ai_configs.append(AIProviderConfig(provider=AIProvider.GEMINI))
 
     # Forecast hours
     st.sidebar.subheader("⏱️ Ore Previsione")
