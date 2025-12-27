@@ -30,6 +30,353 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ============================================================================
+# CUSTOM CSS STYLING
+# ============================================================================
+
+def inject_custom_css():
+    """Inject custom CSS for modern styling."""
+    st.markdown("""
+    <style>
+    /* ===== GLOBAL BACKGROUND ===== */
+    .stApp {
+        background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+        background-attachment: fixed;
+    }
+
+    /* Animated background particles effect */
+    .stApp::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-image:
+            radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.15) 0%, transparent 50%),
+            radial-gradient(circle at 80% 20%, rgba(74, 144, 226, 0.15) 0%, transparent 50%),
+            radial-gradient(circle at 40% 40%, rgba(147, 112, 219, 0.1) 0%, transparent 40%);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    /* ===== MAIN CONTENT STYLING ===== */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    /* ===== HEADER STYLING ===== */
+    h1 {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 800 !important;
+        text-shadow: 0 0 30px rgba(102, 126, 234, 0.3);
+    }
+
+    h2, h3 {
+        color: #e0e0e0 !important;
+    }
+
+    /* ===== SIDEBAR STYLING ===== */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-right: 1px solid rgba(102, 126, 234, 0.3);
+    }
+
+    [data-testid="stSidebar"] .stMarkdown {
+        color: #e0e0e0;
+    }
+
+    /* ===== AI CARD STYLES ===== */
+    .ai-card {
+        background: linear-gradient(145deg, rgba(30, 30, 50, 0.9), rgba(20, 20, 40, 0.95));
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow:
+            0 8px 32px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .ai-card:hover {
+        transform: translateY(-4px);
+        box-shadow:
+            0 12px 40px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    /* Claude Card */
+    .ai-card-claude {
+        border-left: 4px solid #d97706;
+        background: linear-gradient(145deg, rgba(217, 119, 6, 0.1), rgba(30, 30, 50, 0.95));
+    }
+    .ai-card-claude .ai-header { color: #fbbf24; }
+
+    /* GPT Card */
+    .ai-card-gpt {
+        border-left: 4px solid #10b981;
+        background: linear-gradient(145deg, rgba(16, 185, 129, 0.1), rgba(30, 30, 50, 0.95));
+    }
+    .ai-card-gpt .ai-header { color: #34d399; }
+
+    /* Gemini Card */
+    .ai-card-gemini {
+        border-left: 4px solid #3b82f6;
+        background: linear-gradient(145deg, rgba(59, 130, 246, 0.1), rgba(30, 30, 50, 0.95));
+    }
+    .ai-card-gemini .ai-header { color: #60a5fa; }
+
+    /* Qwen Card */
+    .ai-card-qwen {
+        border-left: 4px solid #8b5cf6;
+        background: linear-gradient(145deg, rgba(139, 92, 246, 0.1), rgba(30, 30, 50, 0.95));
+    }
+    .ai-card-qwen .ai-header { color: #a78bfa; }
+
+    /* Deepseek Card */
+    .ai-card-deepseek {
+        border-left: 4px solid #06b6d4;
+        background: linear-gradient(145deg, rgba(6, 182, 212, 0.1), rgba(30, 30, 50, 0.95));
+    }
+    .ai-card-deepseek .ai-header { color: #22d3ee; }
+
+    /* GLM Card */
+    .ai-card-glm {
+        border-left: 4px solid #f43f5e;
+        background: linear-gradient(145deg, rgba(244, 63, 94, 0.1), rgba(30, 30, 50, 0.95));
+    }
+    .ai-card-glm .ai-header { color: #fb7185; }
+
+    /* Grok Card */
+    .ai-card-grok {
+        border-left: 4px solid #eab308;
+        background: linear-gradient(145deg, rgba(234, 179, 8, 0.1), rgba(30, 30, 50, 0.95));
+    }
+    .ai-card-grok .ai-header { color: #facc15; }
+
+    /* AI Card Inner Elements */
+    .ai-header {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ai-confidence {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .confidence-high {
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1));
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .confidence-medium {
+        background: linear-gradient(90deg, rgba(234, 179, 8, 0.2), rgba(234, 179, 8, 0.1));
+        color: #fbbf24;
+        border: 1px solid rgba(234, 179, 8, 0.3);
+    }
+
+    .confidence-low {
+        background: linear-gradient(90deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .ai-section {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.75rem 0;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .ai-section-title {
+        color: #a0a0a0;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.5rem;
+    }
+
+    .ai-section-content {
+        color: #e0e0e0;
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+
+    /* ===== VERDICT CARD ===== */
+    .verdict-card {
+        background: linear-gradient(145deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.1));
+        border-radius: 20px;
+        padding: 2rem;
+        margin: 1.5rem 0;
+        border: 2px solid rgba(102, 126, 234, 0.3);
+        box-shadow:
+            0 10px 40px rgba(102, 126, 234, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .verdict-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 1rem;
+    }
+
+    /* ===== METRICS CARDS ===== */
+    [data-testid="stMetricValue"] {
+        color: #ffffff !important;
+        font-weight: 700 !important;
+    }
+
+    [data-testid="stMetricDelta"] {
+        font-weight: 600 !important;
+    }
+
+    /* ===== BUTTONS ===== */
+    .stButton > button {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .stButton > button[kind="secondary"] {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* ===== EXPANDERS ===== */
+    .streamlit-expanderHeader {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        color: #e0e0e0 !important;
+    }
+
+    .streamlit-expanderContent {
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 0 0 8px 8px;
+    }
+
+    /* ===== PROGRESS BAR ===== */
+    .stProgress > div > div {
+        background: linear-gradient(90deg, #667eea, #764ba2, #f093fb);
+    }
+
+    /* ===== INFO/WARNING BOXES ===== */
+    .stAlert {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        border-left: 4px solid;
+    }
+
+    /* ===== SLIDER ===== */
+    .stSlider > div > div > div {
+        background: linear-gradient(90deg, #667eea, #764ba2);
+    }
+
+    /* ===== SELECTBOX ===== */
+    .stSelectbox > div > div {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+    }
+
+    /* ===== CHECKBOX ===== */
+    .stCheckbox > label {
+        color: #e0e0e0 !important;
+    }
+
+    /* ===== DIVIDER ===== */
+    hr {
+        border: none;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(102, 126, 234, 0.5), transparent);
+        margin: 1.5rem 0;
+    }
+
+    /* ===== LOADING SPINNER ===== */
+    .stSpinner > div {
+        border-color: #667eea !important;
+    }
+
+    /* ===== SCROLLBAR ===== */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, #667eea, #764ba2);
+        border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(180deg, #764ba2, #f093fb);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# AI Provider color themes
+AI_THEMES = {
+    'Claude': {'class': 'claude', 'icon': '🟠', 'color': '#d97706'},
+    'Claude 4.5 Opus': {'class': 'claude', 'icon': '🟠', 'color': '#d97706'},
+    'GPT-4': {'class': 'gpt', 'icon': '🟢', 'color': '#10b981'},
+    'GPT-5 Pro': {'class': 'gpt', 'icon': '🟢', 'color': '#10b981'},
+    'Gemini': {'class': 'gemini', 'icon': '🔵', 'color': '#3b82f6'},
+    'Gemini 3 Pro': {'class': 'gemini', 'icon': '🔵', 'color': '#3b82f6'},
+    'Qwen Max': {'class': 'qwen', 'icon': '🟣', 'color': '#8b5cf6'},
+    'Deepseek V3.2': {'class': 'deepseek', 'icon': '🔷', 'color': '#06b6d4'},
+    'GLM 4.7': {'class': 'glm', 'icon': '🔴', 'color': '#f43f5e'},
+    'Grok 4.1 Fast': {'class': 'grok', 'icon': '🟡', 'color': '#eab308'},
+}
+
+
+def get_ai_theme(ai_name: str) -> dict:
+    """Get the theme for an AI provider."""
+    for key, theme in AI_THEMES.items():
+        if key.lower() in ai_name.lower():
+            return theme
+    return {'class': 'claude', 'icon': '🤖', 'color': '#667eea'}
+
+
 # Import HAEM modules
 from haem.models.meteorological import NWPModel
 from haem.data.meteociel_fields import FieldSelection, FieldPresets, MeteocielField
@@ -766,77 +1113,174 @@ def render_model_comparison(ensemble_results, hour: int):
 # AI ANALYSIS PANEL
 # ============================================================================
 
-def render_ai_analysis(ai_analyses: dict, hour: int):
-    """Render AI analysis panel with reasoning."""
+def render_ai_card(ai_name: str, analysis: dict):
+    """Render a styled AI analysis card."""
+    theme = get_ai_theme(ai_name)
 
-    st.subheader("🤖 Analisi AI - Motivazioni e Riflessioni")
+    if isinstance(analysis, dict):
+        confidence = analysis.get('confidence', 75)
+        summary = analysis.get('summary', 'Analisi non disponibile')
+        physics = analysis.get('physics', '')
+        uncertainty = analysis.get('uncertainty', '')
+        inference_time = analysis.get('inference_time_ms', 0)
+        patterns = analysis.get('patterns', [])
+        findings = analysis.get('findings', [])
+        warnings = analysis.get('warnings', [])
+    else:
+        confidence = getattr(analysis, 'confidence_score', 75)
+        summary = getattr(analysis, 'synoptic_summary', 'Analisi non disponibile')
+        physics = getattr(analysis, 'physical_interpretation', '')
+        uncertainty = getattr(analysis, 'confidence_assessment', '')
+        inference_time = getattr(analysis, 'inference_time_ms', 0)
+        patterns = getattr(analysis, 'pattern_identification', [])
+        findings = getattr(analysis, 'key_findings', [])
+        warnings = getattr(analysis, 'warnings', [])
+
+    # Confidence class
+    if confidence >= 80:
+        conf_class = "confidence-high"
+        conf_emoji = "🟢"
+    elif confidence >= 60:
+        conf_class = "confidence-medium"
+        conf_emoji = "🟡"
+    else:
+        conf_class = "confidence-low"
+        conf_emoji = "🔴"
+
+    # Build patterns HTML
+    patterns_html = ""
+    if patterns and isinstance(patterns, list):
+        patterns_html = "<ul style='margin: 0; padding-left: 1.2rem;'>"
+        for p in patterns[:4]:
+            patterns_html += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{p}</li>"
+        patterns_html += "</ul>"
+
+    # Build findings HTML
+    findings_html = ""
+    if findings and isinstance(findings, list):
+        findings_html = "<ul style='margin: 0; padding-left: 1.2rem;'>"
+        for f in findings[:4]:
+            findings_html += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{f}</li>"
+        findings_html += "</ul>"
+
+    # Build warnings HTML
+    warnings_html = ""
+    if warnings and isinstance(warnings, list) and len(warnings) > 0:
+        warnings_html = "<div style='background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem;'>"
+        warnings_html += "<div style='color: #f87171; font-weight: 600; margin-bottom: 0.5rem;'>⚠️ Avvisi</div>"
+        for w in warnings[:3]:
+            warnings_html += f"<div style='color: #fca5a5; font-size: 0.9rem;'>• {w}</div>"
+        warnings_html += "</div>"
+
+    card_html = f"""
+    <div class="ai-card ai-card-{theme['class']}">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+            <div class="ai-header">
+                <span style="font-size: 1.5rem;">{theme['icon']}</span>
+                <span>{ai_name}</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <span class="ai-confidence {conf_class}">
+                    {conf_emoji} {confidence:.0f}/100
+                </span>
+                {f'<span style="color: #808080; font-size: 0.8rem;">{inference_time:.0f}ms</span>' if inference_time > 0 else ''}
+            </div>
+        </div>
+
+        <div class="ai-section">
+            <div class="ai-section-title">📋 Sintesi Sinottica</div>
+            <div class="ai-section-content">{summary}</div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="ai-section">
+                <div class="ai-section-title">🔬 Interpretazione Fisica</div>
+                <div class="ai-section-content">{physics if physics else 'Non disponibile'}</div>
+            </div>
+
+            <div class="ai-section">
+                <div class="ai-section-title">⚠️ Incertezze e Divergenze</div>
+                <div class="ai-section-content">{uncertainty if uncertainty else 'Non disponibile'}</div>
+            </div>
+        </div>
+
+        {f'''
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="ai-section">
+                <div class="ai-section-title">🎯 Pattern Identificati</div>
+                {patterns_html if patterns_html else '<div class="ai-section-content">Nessun pattern specifico</div>'}
+            </div>
+            <div class="ai-section">
+                <div class="ai-section-title">📌 Conclusioni Chiave</div>
+                {findings_html if findings_html else '<div class="ai-section-content">In elaborazione...</div>'}
+            </div>
+        </div>
+        ''' if patterns_html or findings_html else ''}
+
+        {warnings_html}
+
+        <div style="margin-top: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span style="color: #808080; font-size: 0.85rem;">Livello di Confidenza</span>
+                <span style="color: {theme['color']}; font-weight: 600;">{confidence:.0f}%</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.1); border-radius: 10px; height: 8px; overflow: hidden;">
+                <div style="background: linear-gradient(90deg, {theme['color']}, {theme['color']}88); height: 100%; width: {confidence}%; border-radius: 10px; transition: width 0.5s ease;"></div>
+            </div>
+        </div>
+    </div>
+    """
+
+    st.markdown(card_html, unsafe_allow_html=True)
+
+
+def render_ai_analysis(ai_analyses: dict, hour: int):
+    """Render AI analysis panel with styled cards."""
+
+    st.markdown("""
+    <h2 style="color: #e0e0e0; display: flex; align-items: center; gap: 0.5rem;">
+        <span style="font-size: 1.5rem;">🤖</span>
+        Analisi AI - Ragionamenti Multi-Modello
+    </h2>
+    """, unsafe_allow_html=True)
 
     if not ai_analyses:
-        # Demo analysis
+        # Demo analysis with more data
         demo_analyses = {
-            'Claude': {
+            'Claude 4.5 Opus': {
                 'confidence': 85,
                 'summary': """Una saccatura atlantica si approfondisce verso l'Europa occidentale,
                 con geopotenziali in calo di 8 dam nelle prossime 48h. Il pattern è guidato
                 dalla propagazione di onde di Rossby con numero d'onda 4-5.""",
                 'physics': """L'instabilità baroclina lungo il fronte polare sta convertendo
                 energia potenziale disponibile in energia cinetica. Il jet stream si posiziona
-                a 55°N con massimi di 120kt, favorendo ciclogenesi sul Nord Atlantico.
-                L'avvezione di vorticità positiva in quota precede il sistema.""",
+                a 55°N con massimi di 120kt, favorendo ciclogenesi sul Nord Atlantico.""",
                 'uncertainty': """GFS anticipa il passaggio di 6-12h rispetto a ECMWF.
-                ICON mostra una soluzione più meridionale. La divergenza principale riguarda
-                il timing del fronte e l'intensità del minimo al suolo.""",
+                ICON mostra una soluzione più meridionale.""",
+                'patterns': ['Saccatura atlantica in approfondimento', 'Jet stream a 55°N', 'Ciclogenesi attiva'],
+                'findings': ['Peggioramento in arrivo', 'Timing incerto ±12h'],
+                'warnings': [],
+                'inference_time_ms': 1250,
             },
-            'GPT-4': {
+            'GPT-5 Pro': {
                 'confidence': 78,
                 'summary': """Configurazione tipica da maltempo atlantico con saccatura
                 in approfondimento. Fronte freddo in transito nelle prossime 36-48h.""",
-                'physics': """L'avvezione calda in quota (settore caldo) precede il fronte
-                freddo. La convergenza nei bassi strati alimenta i moti verticali.
-                Spessori 500/1000 in diminuzione indicano ingresso aria fredda.""",
-                'uncertainty': """Noto divergenza tra i modelli sull'intensità del minimo
-                al suolo (ECMWF: 995 hPa, GFS: 990 hPa). Tempistica incerta ±12h.""",
+                'physics': """L'avvezione calda in quota precede il fronte freddo.
+                La convergenza nei bassi strati alimenta i moti verticali.""",
+                'uncertainty': """Divergenza tra i modelli sull'intensità del minimo
+                al suolo (ECMWF: 995 hPa, GFS: 990 hPa).""",
+                'patterns': ['Avvezione calda prefrontale', 'Convergenza nei bassi strati'],
+                'findings': ['Precipitazioni moderate attese', 'Rinforzo ventilazione'],
+                'warnings': ['Possibili fenomeni intensi sul Tirreno'],
+                'inference_time_ms': 980,
             },
         }
         ai_analyses = demo_analyses
 
+    # Render each AI card
     for ai_name, analysis in ai_analyses.items():
-        if isinstance(analysis, dict):
-            confidence = analysis.get('confidence', 75)
-            summary = analysis.get('summary', 'Analisi non disponibile')
-            physics = analysis.get('physics', '')
-            uncertainty = analysis.get('uncertainty', '')
-        else:
-            confidence = getattr(analysis, 'confidence_score', 75)
-            summary = getattr(analysis, 'synoptic_summary', 'Analisi non disponibile')
-            physics = getattr(analysis, 'physical_interpretation', '')
-            uncertainty = getattr(analysis, 'confidence_assessment', '')
-
-        # Confidence color
-        if confidence >= 80:
-            conf_color = "🟢"
-        elif confidence >= 60:
-            conf_color = "🟡"
-        else:
-            conf_color = "🔴"
-
-        with st.expander(f"**{ai_name}** {conf_color} Confidence: {confidence}/100", expanded=True):
-            col1, col2 = st.columns([1, 1])
-
-            with col1:
-                st.markdown("**📋 Sintesi Sinottica:**")
-                st.write(summary)
-
-                st.markdown("**🔬 Interpretazione Fisica:**")
-                st.write(physics)
-
-            with col2:
-                st.markdown("**⚠️ Incertezze e Divergenze:**")
-                st.write(uncertainty)
-
-                # Confidence gauge
-                st.markdown("**📊 Livello Confidenza:**")
-                st.progress(confidence / 100)
+        render_ai_card(ai_name, analysis)
 
 
 # ============================================================================
@@ -846,13 +1290,12 @@ def render_ai_analysis(ai_analyses: dict, hour: int):
 def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = None):
     """Render final ensemble verdict based on highest confidence AI."""
 
-    st.subheader("🎯 Verdetto Finale Ensemble")
-
     # Find the best AI based on confidence score
     best_ai = None
     best_confidence = 0
     best_summary = ""
     best_uncertainty = ""
+    best_theme = None
 
     if ai_analyses:
         for ai_name, analysis in ai_analyses.items():
@@ -863,62 +1306,108 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
                     best_ai = ai_name
                     best_summary = analysis.get('summary', '')
                     best_uncertainty = analysis.get('uncertainty', '')
+                    best_theme = get_ai_theme(ai_name)
 
     if best_ai:
-        # Use the highest confidence AI's analysis
         confidence = best_confidence
         verdict = best_summary
         uncertainty = best_uncertainty
-        source = f"Basato su **{best_ai}** (confidenza più alta)"
+        source = f"Basato su {best_ai}"
     elif ensemble_results is not None and hour in ensemble_results:
         result = ensemble_results[hour]
         confidence = result.final_confidence_score
         verdict = result.synoptic_summary if result.synoptic_summary else "Analisi ensemble dei modelli NWP completata."
         uncertainty = ""
         source = "Basato sui modelli NWP"
+        best_theme = {'icon': '🌐', 'color': '#667eea'}
     else:
-        # Demo verdict
         confidence = 79
         verdict = """I modelli concordano sulla struttura generale ma divergono sul timing.
         ECMWF e ICON mostrano la soluzione più probabile (65% probabilità).
         Scenario alternativo (35%): GFS con passaggio anticipato di 6-12h e intensità maggiore."""
         uncertainty = ""
         source = "Modalità demo"
+        best_theme = {'icon': '🎯', 'color': '#667eea'}
 
-    # Confidence color
+    # Confidence styling
     if confidence >= 80:
-        conf_color = "🟢"
+        conf_class = "confidence-high"
         conf_label = "ALTA"
+        conf_emoji = "🟢"
+        gradient = "linear-gradient(90deg, #10b981, #059669)"
     elif confidence >= 60:
-        conf_color = "🟡"
+        conf_class = "confidence-medium"
         conf_label = "MEDIA"
+        conf_emoji = "🟡"
+        gradient = "linear-gradient(90deg, #eab308, #ca8a04)"
     else:
-        conf_color = "🔴"
+        conf_class = "confidence-low"
         conf_label = "BASSA"
+        conf_emoji = "🔴"
+        gradient = "linear-gradient(90deg, #ef4444, #dc2626)"
 
-    # Display
-    col1, col2 = st.columns([1, 3])
+    # Warnings HTML
+    warnings_html = ""
+    if ensemble_results and hour in ensemble_results:
+        result = ensemble_results[hour]
+        if result.warnings:
+            warnings_html = "<div style='margin-top: 1rem; padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px;'>"
+            warnings_html += "<div style='color: #f87171; font-weight: 600; margin-bottom: 0.5rem;'>⚠️ Avvertenze</div>"
+            for w in result.warnings:
+                warnings_html += f"<div style='color: #fca5a5;'>• {w}</div>"
+            warnings_html += "</div>"
 
-    with col1:
-        st.metric(
-            label=f"{conf_color} Confidenza",
-            value=f"{confidence:.0f}/100",
-            delta=conf_label,
-        )
-        st.caption(source)
+    verdict_html = f"""
+    <div class="verdict-card">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="font-size: 2.5rem;">{best_theme['icon'] if best_theme else '🎯'}</div>
+            <div>
+                <div class="verdict-title">Verdetto Finale Ensemble</div>
+                <div style="color: #a0a0a0; font-size: 0.9rem;">{source}</div>
+            </div>
+        </div>
 
-    with col2:
-        st.markdown("**Sintesi Finale:**")
-        st.write(verdict)
+        <div style="display: grid; grid-template-columns: auto 1fr; gap: 2rem; align-items: start;">
+            <div style="text-align: center;">
+                <div style="
+                    width: 120px;
+                    height: 120px;
+                    border-radius: 50%;
+                    background: {gradient};
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 0 30px {best_theme['color'] if best_theme else '#667eea'}44;
+                ">
+                    <div style="font-size: 2rem; font-weight: 800; color: white;">{confidence:.0f}</div>
+                    <div style="font-size: 0.7rem; color: rgba(255,255,255,0.8);">/ 100</div>
+                </div>
+                <div style="margin-top: 0.75rem;">
+                    <span class="ai-confidence {conf_class}">{conf_emoji} {conf_label}</span>
+                </div>
+            </div>
 
-        if uncertainty:
-            st.markdown("**Incertezze:**")
-            st.write(uncertainty)
+            <div>
+                <div class="ai-section" style="margin: 0;">
+                    <div class="ai-section-title">📋 Sintesi Finale</div>
+                    <div class="ai-section-content" style="font-size: 1rem;">{verdict}</div>
+                </div>
 
-        if ensemble_results and hour in ensemble_results:
-            result = ensemble_results[hour]
-            if result.warnings:
-                st.warning("⚠️ " + " | ".join(result.warnings))
+                {f'''
+                <div class="ai-section" style="margin-top: 1rem;">
+                    <div class="ai-section-title">⚠️ Incertezze Residue</div>
+                    <div class="ai-section-content">{uncertainty}</div>
+                </div>
+                ''' if uncertainty else ''}
+
+                {warnings_html}
+            </div>
+        </div>
+    </div>
+    """
+
+    st.markdown(verdict_html, unsafe_allow_html=True)
 
 
 # ============================================================================
@@ -969,9 +1458,20 @@ def main():
 
     init_session_state()
 
-    # Header
-    st.title("🌍 HAEM - Hybrid AI Ensemble Model")
-    st.markdown("*Sistema di analisi meteorologica multi-modello con interpretazione AI*")
+    # Inject custom CSS styling
+    inject_custom_css()
+
+    # Header with styled gradient
+    st.markdown("""
+    <div style="text-align: center; padding: 1rem 0;">
+        <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">
+            🌍 HAEM - Hybrid AI Ensemble Model
+        </h1>
+        <p style="color: #a0a0a0; font-size: 1.1rem; margin: 0;">
+            Sistema di analisi meteorologica multi-modello con interpretazione AI
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
 
     # Sidebar
