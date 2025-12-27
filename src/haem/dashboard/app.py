@@ -60,6 +60,26 @@ def inject_custom_css():
         z-index: 0;
     }
 
+    /* ===== GLOBAL TEXT COLOR FIX ===== */
+    .stApp, .stApp p, .stApp span, .stApp div, .stApp label {
+        color: #e0e0e0 !important;
+    }
+
+    /* All text elements */
+    p, span, div, label, .stMarkdown, .stText {
+        color: #e0e0e0 !important;
+    }
+
+    /* Streamlit specific text elements */
+    .stMarkdown p, .stMarkdown span, .stMarkdown div {
+        color: #e0e0e0 !important;
+    }
+
+    /* Caption text */
+    .stCaption, small, .caption {
+        color: #a0a0a0 !important;
+    }
+
     /* ===== MAIN CONTENT STYLING ===== */
     .main .block-container {
         padding-top: 2rem;
@@ -76,7 +96,7 @@ def inject_custom_css():
         text-shadow: 0 0 30px rgba(102, 126, 234, 0.3);
     }
 
-    h2, h3 {
+    h2, h3, h4, h5, h6 {
         color: #e0e0e0 !important;
     }
 
@@ -86,8 +106,43 @@ def inject_custom_css():
         border-right: 1px solid rgba(102, 126, 234, 0.3);
     }
 
+    [data-testid="stSidebar"] * {
+        color: #e0e0e0 !important;
+    }
+
     [data-testid="stSidebar"] .stMarkdown {
-        color: #e0e0e0;
+        color: #e0e0e0 !important;
+    }
+
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {
+        color: #e0e0e0 !important;
+    }
+
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        color: #ffffff !important;
+    }
+
+    /* Sidebar subheader */
+    [data-testid="stSidebar"] .stSubheader {
+        color: #ffffff !important;
+    }
+
+    /* ===== INPUT ELEMENTS ===== */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+        background: rgba(255, 255, 255, 0.05) !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    }
+
+    .stSelectbox > div > div, .stMultiSelect > div > div {
+        background: rgba(255, 255, 255, 0.05) !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    }
+
+    /* Selectbox dropdown text */
+    .stSelectbox label, .stMultiSelect label {
+        color: #e0e0e0 !important;
     }
 
     /* ===== AI CARD STYLES ===== */
@@ -116,49 +171,49 @@ def inject_custom_css():
         border-left: 4px solid #d97706;
         background: linear-gradient(145deg, rgba(217, 119, 6, 0.1), rgba(30, 30, 50, 0.95));
     }
-    .ai-card-claude .ai-header { color: #fbbf24; }
+    .ai-card-claude .ai-header { color: #fbbf24 !important; }
 
     /* GPT Card */
     .ai-card-gpt {
         border-left: 4px solid #10b981;
         background: linear-gradient(145deg, rgba(16, 185, 129, 0.1), rgba(30, 30, 50, 0.95));
     }
-    .ai-card-gpt .ai-header { color: #34d399; }
+    .ai-card-gpt .ai-header { color: #34d399 !important; }
 
     /* Gemini Card */
     .ai-card-gemini {
         border-left: 4px solid #3b82f6;
         background: linear-gradient(145deg, rgba(59, 130, 246, 0.1), rgba(30, 30, 50, 0.95));
     }
-    .ai-card-gemini .ai-header { color: #60a5fa; }
+    .ai-card-gemini .ai-header { color: #60a5fa !important; }
 
     /* Qwen Card */
     .ai-card-qwen {
         border-left: 4px solid #8b5cf6;
         background: linear-gradient(145deg, rgba(139, 92, 246, 0.1), rgba(30, 30, 50, 0.95));
     }
-    .ai-card-qwen .ai-header { color: #a78bfa; }
+    .ai-card-qwen .ai-header { color: #a78bfa !important; }
 
     /* Deepseek Card */
     .ai-card-deepseek {
         border-left: 4px solid #06b6d4;
         background: linear-gradient(145deg, rgba(6, 182, 212, 0.1), rgba(30, 30, 50, 0.95));
     }
-    .ai-card-deepseek .ai-header { color: #22d3ee; }
+    .ai-card-deepseek .ai-header { color: #22d3ee !important; }
 
     /* GLM Card */
     .ai-card-glm {
         border-left: 4px solid #f43f5e;
         background: linear-gradient(145deg, rgba(244, 63, 94, 0.1), rgba(30, 30, 50, 0.95));
     }
-    .ai-card-glm .ai-header { color: #fb7185; }
+    .ai-card-glm .ai-header { color: #fb7185 !important; }
 
     /* Grok Card */
     .ai-card-grok {
         border-left: 4px solid #eab308;
         background: linear-gradient(145deg, rgba(234, 179, 8, 0.1), rgba(30, 30, 50, 0.95));
     }
-    .ai-card-grok .ai-header { color: #facc15; }
+    .ai-card-grok .ai-header { color: #facc15 !important; }
 
     /* AI Card Inner Elements */
     .ai-header {
@@ -168,6 +223,7 @@ def inject_custom_css():
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        color: #ffffff !important;
     }
 
     .ai-confidence {
@@ -182,19 +238,19 @@ def inject_custom_css():
 
     .confidence-high {
         background: linear-gradient(90deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1));
-        color: #34d399;
+        color: #34d399 !important;
         border: 1px solid rgba(16, 185, 129, 0.3);
     }
 
     .confidence-medium {
         background: linear-gradient(90deg, rgba(234, 179, 8, 0.2), rgba(234, 179, 8, 0.1));
-        color: #fbbf24;
+        color: #fbbf24 !important;
         border: 1px solid rgba(234, 179, 8, 0.3);
     }
 
     .confidence-low {
         background: linear-gradient(90deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
-        color: #f87171;
+        color: #f87171 !important;
         border: 1px solid rgba(239, 68, 68, 0.3);
     }
 
@@ -207,7 +263,7 @@ def inject_custom_css():
     }
 
     .ai-section-title {
-        color: #a0a0a0;
+        color: #a0a0a0 !important;
         font-size: 0.85rem;
         font-weight: 600;
         text-transform: uppercase;
@@ -216,7 +272,7 @@ def inject_custom_css():
     }
 
     .ai-section-content {
-        color: #e0e0e0;
+        color: #e0e0e0 !important;
         font-size: 0.95rem;
         line-height: 1.6;
     }
