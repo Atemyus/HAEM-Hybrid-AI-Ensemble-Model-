@@ -44,6 +44,22 @@ def inject_custom_css():
         background-attachment: fixed;
     }
 
+    /* ===== HEADER/TOP BAR ===== */
+    header[data-testid="stHeader"] {
+        background: linear-gradient(90deg, #0f0c29 0%, #302b63 50%, #24243e 100%) !important;
+        border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+    }
+
+    /* Hide Streamlit branding/menu if needed */
+    #MainMenu {
+        background: transparent !important;
+    }
+
+    /* Top decoration bar */
+    .stDeployButton, [data-testid="stToolbar"] {
+        background: transparent !important;
+    }
+
     /* Animated background particles effect */
     .stApp::before {
         content: '';
