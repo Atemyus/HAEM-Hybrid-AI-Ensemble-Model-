@@ -231,6 +231,8 @@ class BaseAIAnalyzer(ABC):
         model_data: dict,
         field_selection: list,
         forecast_hour: int,
+        selected_field: str = "z500",
+        field_description: str = "",
     ) -> AIAnalysisResult:
         """Perform meteorological analysis."""
         pass
@@ -240,41 +242,62 @@ class BaseAIAnalyzer(ABC):
         model_data: dict,
         field_selection: list,
         forecast_hour: int,
+        selected_field: str = "z500",
+        field_description: str = "",
     ) -> str:
-        """Build the analysis prompt for the AI."""
-        prompt = f"""You are an expert meteorological analyst. Analyze the following NWP model data
-and provide a comprehensive meteorological assessment.
+        """Build the analysis prompt for the AI with field-specific context."""
 
-## Data Summary
-- Forecast Hour: +{forecast_hour}h
-- Models Available: {', '.join(model_data.keys()) if isinstance(model_data, dict) else 'Multiple'}
-- Fields Analyzed: {', '.join(str(f) for f in field_selection)}
+        # Format model data for display
+        data_str = ""
+        if isinstance(model_data, dict):
+            for model, stats in model_data.items():
+                data_str += f"\n### {model.upper()}:\n"
+                for key, val in stats.items():
+                    data_str += f"  - {key}: {val:.1f}\n"
 
-## Required Analysis
+        prompt = f"""Sei un meteorologo esperto. Analizza i seguenti dati dei modelli NWP e fornisci una valutazione meteorologica dettagliata IN ITALIANO.
 
-1. **Synoptic Summary**: Brief overview of the current/forecast synoptic situation
+## Dati Analizzati
+- **Campo Selezionato**: {selected_field.upper()} - {field_description}
+- **Ora di Previsione**: +{forecast_hour}h
+- **Modelli Disponibili**: {', '.join(model_data.keys()) if isinstance(model_data, dict) else 'Multipli'}
+- **Campi**: {', '.join(str(f) for f in field_selection)}
 
-2. **Pattern Identification**: List the main synoptic patterns identified:
-   - Troughs, ridges, cut-off lows, blocking
-   - Pressure centers (highs/lows)
-   - Frontal zones, jet stream position
+## Statistiche dai Modelli NWP:
+{data_str}
 
-3. **Physical Interpretation**: Explain WHY these patterns exist using:
-   - Rossby wave dynamics
-   - Baroclinic/barotropic processes
-   - Thermal advection
-   - Jet stream interactions
+## Analisi Richiesta (rispondi IN ITALIANO):
 
-4. **Confidence Assessment**: Rate your confidence (0-100) and explain:
-   - Model agreement level
-   - Pattern predictability
-   - Uncertainty sources
+### 1. SINTESI SINOTTICA
+Descrivi la situazione sinottica prevista a +{forecast_hour}h, focalizzandoti sul campo {selected_field.upper()} ({field_description}).
 
-5. **Key Findings**: Bullet points of most important takeaways
+### 2. IDENTIFICAZIONE PATTERN
+Elenca i pattern principali identificati:
+- Saccature, promontori, cut-off, blocchi
+- Centri di alta/bassa pressione
+- Zone frontali, posizione del jet stream
 
-6. **Warnings**: Any significant concerns or caveats
+### 3. INTERPRETAZIONE FISICA
+Spiega PERCHÉ questi pattern esistono usando:
+- Dinamica delle onde di Rossby
+- Processi baroclini/barotropici
+- Avvezione termica
+- Interazioni con il jet stream
 
-Provide scientifically rigorous analysis with physical causality.
+### 4. VALUTAZIONE CONFIDENZA
+Dai un punteggio di confidenza (0-100) e spiega:
+- Livello di accordo tra i modelli
+- Prevedibilità del pattern
+- Fonti di incertezza
+
+### 5. INCERTEZZE E DIVERGENZE
+Descrivi le divergenze tra i modelli e le principali incertezze.
+
+### 6. CONCLUSIONI CHIAVE
+- Punti principali
+- Eventuali avvisi o alert meteo
+
+Rispondi con analisi scientificamente rigorosa e causalità fisica.
 """
         return prompt
 
@@ -590,10 +613,15 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
         model_data: dict[str, Any],
         field_selection: list[str],
         forecast_hour: int,
+        selected_field: str = "z500",
+        field_description: str = "",
     ) -> AIAnalysisResult:
         """Analyze weather data using AIML API."""
         start_time = time.time()
-        prompt = self._build_analysis_prompt(model_data, field_selection, forecast_hour)
+        prompt = self._build_analysis_prompt(
+            model_data, field_selection, forecast_hour,
+            selected_field=selected_field, field_description=field_description
+        )
 
         try:
             from openai import OpenAI
@@ -740,12 +768,20 @@ class MultiAIOrchestrator:
         model_data: dict,
         field_selection: list,
         forecast_hour: int,
+        selected_field: str = "z500",
+        field_description: str = "",
     ) -> list[AIAnalysisResult]:
         """Run analysis on all configured AI providers in parallel."""
         tasks = []
 
         for provider, analyzer in self.analyzers.items():
-            task = analyzer.analyze(model_data, field_selection, forecast_hour)
+            task = analyzer.analyze(
+                model_data,
+                field_selection,
+                forecast_hour,
+                selected_field=selected_field,
+                field_description=field_description,
+            )
             tasks.append(task)
 
         if not tasks:

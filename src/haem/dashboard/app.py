@@ -140,35 +140,83 @@ async def fetch_weather_data(models: list[NWPModel], forecast_hours: list[int]):
     return await fetcher.fetch_all_models(forecast_hours=forecast_hours)
 
 
-async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], forecast_hour: int):
-    """Run AI analysis on the weather data."""
+async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], forecast_hour: int, selected_field: str = "z500"):
+    """Run AI analysis on the weather data for a specific field and hour."""
     if not ai_configs:
         return {}
 
     orchestrator = MultiAIOrchestrator(ai_configs)
 
-    # Prepare data summary for AI
+    # Field descriptions for AI context
+    field_descriptions = {
+        'z500': 'Geopotenziale a 500 hPa - indica la posizione di saccature e promontori',
+        'z850': 'Geopotenziale a 850 hPa - indica flussi nei bassi strati',
+        't850': 'Temperatura a 850 hPa - indica masse d\'aria e fronti',
+        't500': 'Temperatura a 500 hPa - indica instabilità e avvezione termica',
+        'slp': 'Pressione al livello del mare - indica centri di alta e bassa pressione',
+        't2m': 'Temperatura a 2 metri - indica condizioni al suolo',
+        'precip': 'Precipitazioni - indica pioggia e temporali',
+        'snow': 'Neve - indica accumuli nevosi',
+        'wind_10m': 'Vento a 10 metri - indica condizioni ventose al suolo',
+        'wind_300': 'Jet stream a 300 hPa - indica correnti a getto',
+        'cape': 'CAPE - indica energia disponibile per convezione',
+        'spread': 'Spread ensemble - indica incertezza tra i modelli',
+    }
+
+    # Prepare comprehensive data summary for AI
     data_summary = {}
     for model, data in model_data.items():
+        model_stats = {}
+
+        # Always include basic synoptic fields
         if forecast_hour in data.z500:
             z500 = data.z500[forecast_hour]
-            data_summary[model.value] = {
-                "z500_mean": float(np.nanmean(z500.data)),
-                "z500_min": float(np.nanmin(z500.data)),
-                "z500_max": float(np.nanmax(z500.data)),
-            }
+            model_stats["z500_mean"] = float(np.nanmean(z500.data))
+            model_stats["z500_min"] = float(np.nanmin(z500.data))
+            model_stats["z500_max"] = float(np.nanmax(z500.data))
+
         if forecast_hour in data.t850:
             t850 = data.t850[forecast_hour]
-            data_summary[model.value]["t850_mean"] = float(np.nanmean(t850.data) - 273.15)
+            model_stats["t850_mean_C"] = float(np.nanmean(t850.data) - 273.15)
+            model_stats["t850_min_C"] = float(np.nanmin(t850.data) - 273.15)
+            model_stats["t850_max_C"] = float(np.nanmax(t850.data) - 273.15)
+
         if forecast_hour in data.slp:
             slp = data.slp[forecast_hour]
-            data_summary[model.value]["slp_min"] = float(np.nanmin(slp.data))
-            data_summary[model.value]["slp_max"] = float(np.nanmax(slp.data))
+            model_stats["slp_min_hPa"] = float(np.nanmin(slp.data))
+            model_stats["slp_max_hPa"] = float(np.nanmax(slp.data))
+
+        # Add field-specific data based on selection
+        if selected_field == 't2m' and hasattr(data, 't2m') and forecast_hour in data.t2m:
+            t2m = data.t2m[forecast_hour]
+            model_stats["t2m_mean_C"] = float(np.nanmean(t2m.data))
+            model_stats["t2m_min_C"] = float(np.nanmin(t2m.data))
+            model_stats["t2m_max_C"] = float(np.nanmax(t2m.data))
+
+        if selected_field == 'precip' and hasattr(data, 'precip') and forecast_hour in data.precip:
+            precip = data.precip[forecast_hour]
+            model_stats["precip_max_mm"] = float(np.nanmax(precip.data))
+            model_stats["precip_mean_mm"] = float(np.nanmean(precip.data))
+
+        if selected_field == 'cape' and hasattr(data, 'cape') and forecast_hour in data.cape:
+            cape = data.cape[forecast_hour]
+            model_stats["cape_max_Jkg"] = float(np.nanmax(cape.data))
+            model_stats["cape_mean_Jkg"] = float(np.nanmean(cape.data))
+
+        if model_stats:
+            data_summary[model.value] = model_stats
+
+    # Build field selection list based on current field
+    field_list = [selected_field.upper()]
+    if selected_field not in ['z500', 't850', 'slp']:
+        field_list.extend(['Z500', 'T850', 'SLP'])  # Always include basic synoptic
 
     results = await orchestrator.analyze_all(
         model_data=data_summary,
-        field_selection=["Z500", "T850", "SLP"],
+        field_selection=field_list,
         forecast_hour=forecast_hour,
+        selected_field=selected_field,
+        field_description=field_descriptions.get(selected_field, selected_field),
     )
 
     # Convert to dict format for display
@@ -782,34 +830,77 @@ def render_ai_analysis(ai_analyses: dict, hour: int):
 # ENSEMBLE VERDICT
 # ============================================================================
 
-def render_ensemble_verdict(ensemble_results, hour: int):
-    """Render final ensemble verdict."""
+def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = None):
+    """Render final ensemble verdict based on highest confidence AI."""
 
-    st.subheader("🎯 Verdetto Ensemble")
+    st.subheader("🎯 Verdetto Finale Ensemble")
 
-    if ensemble_results is None or hour not in ensemble_results:
+    # Find the best AI based on confidence score
+    best_ai = None
+    best_confidence = 0
+    best_summary = ""
+    best_uncertainty = ""
+
+    if ai_analyses:
+        for ai_name, analysis in ai_analyses.items():
+            if isinstance(analysis, dict):
+                conf = analysis.get('confidence', 0)
+                if conf > best_confidence:
+                    best_confidence = conf
+                    best_ai = ai_name
+                    best_summary = analysis.get('summary', '')
+                    best_uncertainty = analysis.get('uncertainty', '')
+
+    if best_ai:
+        # Use the highest confidence AI's analysis
+        confidence = best_confidence
+        verdict = best_summary
+        uncertainty = best_uncertainty
+        source = f"Basato su **{best_ai}** (confidenza più alta)"
+    elif ensemble_results is not None and hour in ensemble_results:
+        result = ensemble_results[hour]
+        confidence = result.final_confidence_score
+        verdict = result.synoptic_summary if result.synoptic_summary else "Analisi ensemble dei modelli NWP completata."
+        uncertainty = ""
+        source = "Basato sui modelli NWP"
+    else:
         # Demo verdict
         confidence = 79
         verdict = """I modelli concordano sulla struttura generale ma divergono sul timing.
         ECMWF e ICON mostrano la soluzione più probabile (65% probabilità).
         Scenario alternativo (35%): GFS con passaggio anticipato di 6-12h e intensità maggiore."""
-    else:
-        result = ensemble_results[hour]
-        confidence = result.final_confidence_score
-        verdict = result.synoptic_summary
+        uncertainty = ""
+        source = "Modalità demo"
 
-    # Confidence score display
+    # Confidence color
+    if confidence >= 80:
+        conf_color = "🟢"
+        conf_label = "ALTA"
+    elif confidence >= 60:
+        conf_color = "🟡"
+        conf_label = "MEDIA"
+    else:
+        conf_color = "🔴"
+        conf_label = "BASSA"
+
+    # Display
     col1, col2 = st.columns([1, 3])
 
     with col1:
         st.metric(
-            label="Confidence Score",
+            label=f"{conf_color} Confidenza",
             value=f"{confidence:.0f}/100",
-            delta=None,
+            delta=conf_label,
         )
+        st.caption(source)
 
     with col2:
+        st.markdown("**Sintesi Finale:**")
         st.write(verdict)
+
+        if uncertainty:
+            st.markdown("**Incertezze:**")
+            st.write(uncertainty)
 
         if ensemble_results and hour in ensemble_results:
             result = ensemble_results[hour]
@@ -940,9 +1031,16 @@ def main():
                     asyncio.set_event_loop(loop)
                     try:
                         ai_analyses = loop.run_until_complete(
-                            run_ai_analysis(model_data, config['ai_configs'], st.session_state.current_hour)
+                            run_ai_analysis(
+                                model_data,
+                                config['ai_configs'],
+                                st.session_state.current_hour,
+                                selected_field=st.session_state.selected_field
+                            )
                         )
                         st.session_state.ai_analyses = ai_analyses
+                        st.session_state.last_ai_hour = st.session_state.current_hour
+                        st.session_state.last_ai_field = st.session_state.selected_field
                     finally:
                         loop.close()
 
@@ -1002,6 +1100,40 @@ def main():
 
     st.markdown("---")
 
+    # Check if we need to re-run AI analysis (hour or field changed)
+    need_ai_reanalysis = False
+    if 'last_ai_hour' not in st.session_state:
+        st.session_state.last_ai_hour = None
+    if 'last_ai_field' not in st.session_state:
+        st.session_state.last_ai_field = None
+
+    # Detect changes
+    if (st.session_state.last_ai_hour != current_hour or
+        st.session_state.last_ai_field != st.session_state.selected_field):
+        need_ai_reanalysis = True
+
+    # Re-run AI analysis if needed and we have data
+    if need_ai_reanalysis and st.session_state.model_data and config['ai_configs']:
+        with st.spinner(f"🤖 Aggiornamento analisi AI per {st.session_state.selected_field.upper()} +{current_hour}h..."):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                ai_analyses = loop.run_until_complete(
+                    run_ai_analysis(
+                        st.session_state.model_data,
+                        config['ai_configs'],
+                        current_hour,
+                        selected_field=st.session_state.selected_field
+                    )
+                )
+                st.session_state.ai_analyses = ai_analyses
+                st.session_state.last_ai_hour = current_hour
+                st.session_state.last_ai_field = st.session_state.selected_field
+            except Exception as e:
+                st.error(f"Errore nell'analisi AI: {e}")
+            finally:
+                loop.close()
+
     # Main layout: Map + Model comparison
     col_map, col_sidebar = st.columns([2, 1])
 
@@ -1022,8 +1154,8 @@ def main():
 
     st.markdown("---")
 
-    # Ensemble Verdict
-    render_ensemble_verdict(st.session_state.ensemble_results, current_hour)
+    # Ensemble Verdict (now uses AI analyses for best verdict)
+    render_ensemble_verdict(st.session_state.ensemble_results, current_hour, st.session_state.ai_analyses)
 
     # Footer
     st.markdown("---")
