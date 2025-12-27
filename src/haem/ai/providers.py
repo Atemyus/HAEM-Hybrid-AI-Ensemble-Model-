@@ -73,17 +73,17 @@ class AIProvider(str, Enum):
     def default_model(self) -> str:
         """Default model ID for this provider (AIML API model names)."""
         models = {
-            "claude": "anthropic/claude-4-opus-20250514",
-            "gpt4": "openai/gpt-4-turbo",
-            "gpt4o": "openai/gpt-4o",
-            "gpt5": "openai/o3",
-            "gemini": "google/gemini-2.0-flash",
-            "gemini_pro": "google/gemini-2.5-pro-preview-06-05",
-            "qwen": "Qwen/Qwen3-235B-A22B",
-            "deepseek": "deepseek/DeepSeek-R1",
-            "glm": "THUDM/GLM-4-32B-0414",
-            "grok": "x-ai/grok-3-fast",
-            "mistral": "mistralai/mistral-large-latest",
+            "claude": "claude-opus-4-5",
+            "gpt4": "gpt-4-turbo",
+            "gpt4o": "gpt-4o",
+            "gpt5": "gpt-5.2-chat-latest",
+            "gemini": "gemini-2.5-flash",
+            "gemini_pro": "gemini-2.5-pro",
+            "qwen": "qwen-max",
+            "deepseek": "deepseek/deepseek-thinking-v3.2-exp",
+            "glm": "glm-4.7",
+            "grok": "grok-4-1-fast-reasoning",
+            "mistral": "mistralai/mistral-nemo",
             "llama": "meta-llama/Llama-4-Scout-17B-16E-Instruct",
             "local": "llama3.1:8b",
         }
