@@ -719,6 +719,9 @@ def init_session_state():
         st.session_state.ensemble_results = None
     if 'ai_analyses' not in st.session_state:
         st.session_state.ai_analyses = {}
+    # Cache for AI analyses keyed by (hour, field, preset)
+    if 'ai_analyses_cache' not in st.session_state:
+        st.session_state.ai_analyses_cache = {}
     if 'current_hour' not in st.session_state:
         st.session_state.current_hour = 48
     if 'selected_field' not in st.session_state:
@@ -729,6 +732,28 @@ def init_session_state():
         st.session_state.auto_refresh = False
     if 'last_ai_preset' not in st.session_state:
         st.session_state.last_ai_preset = None
+
+
+def get_ai_cache_key(hour: int, field: str, preset: str) -> str:
+    """Generate a cache key for AI analyses."""
+    return f"{hour}_{field}_{preset}"
+
+
+def get_cached_ai_analysis(hour: int, field: str, preset: str) -> dict:
+    """Get cached AI analysis if available."""
+    cache_key = get_ai_cache_key(hour, field, preset)
+    return st.session_state.ai_analyses_cache.get(cache_key)
+
+
+def cache_ai_analysis(hour: int, field: str, preset: str, analyses: dict):
+    """Cache AI analysis for a specific hour/field/preset combination."""
+    cache_key = get_ai_cache_key(hour, field, preset)
+    st.session_state.ai_analyses_cache[cache_key] = analyses
+
+
+def clear_ai_cache():
+    """Clear all cached AI analyses (called when new data is fetched)."""
+    st.session_state.ai_analyses_cache = {}
 
 
 # ============================================================================
@@ -1585,6 +1610,9 @@ def main():
                 model_data = fetch_weather_data_cached(models_tuple, hours_tuple, cache_key)
                 st.session_state.model_data = model_data
 
+                # Clear AI analysis cache when new data is loaded
+                clear_ai_cache()
+
                 # Compute ensemble
                 ensemble_results = {}
                 for hour in config['forecast_hours']:
@@ -1608,10 +1636,14 @@ def main():
                                 preset=config['field_preset']
                             )
                         )
+                        # Cache the initial analysis
+                        cache_ai_analysis(
+                            st.session_state.current_hour,
+                            st.session_state.selected_field,
+                            config['field_preset'],
+                            ai_analyses
+                        )
                         st.session_state.ai_analyses = ai_analyses
-                        st.session_state.last_ai_hour = st.session_state.current_hour
-                        st.session_state.last_ai_field = st.session_state.selected_field
-                        st.session_state.last_ai_preset = config['field_preset']
                     finally:
                         loop.close()
 
@@ -1671,25 +1703,19 @@ def main():
 
     st.markdown("---")
 
-    # Check if we need to re-run AI analysis (hour, field, or preset changed)
-    need_ai_reanalysis = False
-    if 'last_ai_hour' not in st.session_state:
-        st.session_state.last_ai_hour = None
-    if 'last_ai_field' not in st.session_state:
-        st.session_state.last_ai_field = None
-    if 'last_ai_preset' not in st.session_state:
-        st.session_state.last_ai_preset = None
-
-    # Detect changes (hour, field, or preset)
+    # Check if we need to update AI analysis display (hour, field, or preset changed)
     current_preset = config['field_preset']
-    if (st.session_state.last_ai_hour != current_hour or
-        st.session_state.last_ai_field != st.session_state.selected_field or
-        st.session_state.last_ai_preset != current_preset):
-        need_ai_reanalysis = True
+    current_field = st.session_state.selected_field
 
-    # Re-run AI analysis if needed and we have data
-    if need_ai_reanalysis and st.session_state.model_data and config['ai_configs']:
-        with st.spinner(f"🤖 Aggiornamento analisi AI per {st.session_state.selected_field.upper()} +{current_hour}h ({current_preset})..."):
+    # Check if we have cached analysis for this combination
+    cached_analysis = get_cached_ai_analysis(current_hour, current_field, current_preset)
+
+    if cached_analysis:
+        # Use cached analysis - no API call needed
+        st.session_state.ai_analyses = cached_analysis
+    elif st.session_state.model_data and config['ai_configs']:
+        # No cache found - need to run AI analysis
+        with st.spinner(f"🤖 Generazione analisi AI per {current_field.upper()} +{current_hour}h ({current_preset})..."):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -1698,14 +1724,13 @@ def main():
                         st.session_state.model_data,
                         config['ai_configs'],
                         current_hour,
-                        selected_field=st.session_state.selected_field,
+                        selected_field=current_field,
                         preset=current_preset
                     )
                 )
+                # Cache the results
+                cache_ai_analysis(current_hour, current_field, current_preset, ai_analyses)
                 st.session_state.ai_analyses = ai_analyses
-                st.session_state.last_ai_hour = current_hour
-                st.session_state.last_ai_field = st.session_state.selected_field
-                st.session_state.last_ai_preset = current_preset
             except Exception as e:
                 st.error(f"Errore nell'analisi AI: {e}")
             finally:
