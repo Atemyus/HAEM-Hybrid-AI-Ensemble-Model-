@@ -1373,8 +1373,15 @@ def render_ai_card(ai_name: str, analysis: dict):
 """, unsafe_allow_html=True)
 
 
-def render_ai_analysis(ai_analyses: dict, hour: int):
-    """Render AI analysis panel with styled cards."""
+def render_ai_analysis(ai_analyses: dict, hour: int, selected_ai_configs: list = None):
+    """Render AI analysis panel with styled cards.
+
+    Args:
+        ai_analyses: Dictionary of AI analyses keyed by provider full name
+        hour: Forecast hour
+        selected_ai_configs: List of currently selected AIProviderConfig objects.
+                           If provided, only these AIs will be displayed.
+    """
 
     st.markdown("""
     <h2 style="color: #e0e0e0; display: flex; align-items: center; gap: 0.5rem;">
@@ -1417,17 +1424,44 @@ def render_ai_analysis(ai_analyses: dict, hour: int):
         }
         ai_analyses = demo_analyses
 
-    # Render each AI card
+    # Build list of selected AI full names for filtering
+    selected_ai_names = None
+    if selected_ai_configs:
+        selected_ai_names = {config.provider.full_name for config in selected_ai_configs}
+
+    # Render each AI card (filtered by selection if provided)
+    displayed_count = 0
     for ai_name, analysis in ai_analyses.items():
+        # If we have a filter, only show selected AIs
+        if selected_ai_names is not None and ai_name not in selected_ai_names:
+            continue
         render_ai_card(ai_name, analysis)
+        displayed_count += 1
+
+    # Show message if no AIs are selected
+    if displayed_count == 0 and selected_ai_configs is not None and len(selected_ai_configs) == 0:
+        st.info("🤖 Nessun modello AI selezionato. Seleziona almeno un modello dalla sidebar.")
 
 
 # ============================================================================
 # ENSEMBLE VERDICT
 # ============================================================================
 
-def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = None):
-    """Render final ensemble verdict based on highest confidence AI."""
+def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = None, selected_ai_configs: list = None):
+    """Render final ensemble verdict based on highest confidence AI.
+
+    Args:
+        ensemble_results: Ensemble computation results
+        hour: Forecast hour
+        ai_analyses: Dictionary of AI analyses
+        selected_ai_configs: List of currently selected AIProviderConfig objects.
+                           Only these AIs will be considered for the verdict.
+    """
+
+    # Build list of selected AI full names for filtering
+    selected_ai_names = None
+    if selected_ai_configs:
+        selected_ai_names = {config.provider.full_name for config in selected_ai_configs}
 
     # Find the best AI based on confidence score
     best_ai = None
@@ -1439,6 +1473,9 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
 
     if ai_analyses:
         for ai_name, analysis in ai_analyses.items():
+            # Filter by selected AIs if a filter is provided
+            if selected_ai_names is not None and ai_name not in selected_ai_names:
+                continue
             if isinstance(analysis, dict):
                 conf = analysis.get('confidence', 0)
                 # Skip error responses
@@ -1748,12 +1785,15 @@ def main():
         ('wind_300', 'Jet'),
         ('spread', 'Spread'),
     ]
+    field_changed = False
     for col, (field_id, label) in zip(cols_synop, synop_fields):
         with col:
             if st.button(label, use_container_width=True,
                          type="primary" if st.session_state.selected_field == field_id else "secondary",
                          key=f"btn_{field_id}"):
-                st.session_state.selected_field = field_id
+                if st.session_state.selected_field != field_id:
+                    st.session_state.selected_field = field_id
+                    field_changed = True
 
     # Row 2: Surface and precipitation
     st.caption("Superficie e Precipitazioni")
@@ -1771,7 +1811,13 @@ def main():
             if st.button(label, use_container_width=True,
                          type="primary" if st.session_state.selected_field == field_id else "secondary",
                          key=f"btn_{field_id}"):
-                st.session_state.selected_field = field_id
+                if st.session_state.selected_field != field_id:
+                    st.session_state.selected_field = field_id
+                    field_changed = True
+
+    # Force rerun if field changed to ensure immediate map update
+    if field_changed:
+        st.rerun()
 
     st.markdown("---")
 
@@ -1841,13 +1887,13 @@ def main():
 
     st.markdown("---")
 
-    # AI Analysis
-    render_ai_analysis(st.session_state.ai_analyses, current_hour)
+    # AI Analysis (filtered by currently selected AIs)
+    render_ai_analysis(st.session_state.ai_analyses, current_hour, config['ai_configs'])
 
     st.markdown("---")
 
-    # Ensemble Verdict (now uses AI analyses for best verdict)
-    render_ensemble_verdict(st.session_state.ensemble_results, current_hour, st.session_state.ai_analyses)
+    # Ensemble Verdict (now uses AI analyses for best verdict, also filtered)
+    render_ensemble_verdict(st.session_state.ensemble_results, current_hour, st.session_state.ai_analyses, config['ai_configs'])
 
     # Footer
     st.markdown("---")
