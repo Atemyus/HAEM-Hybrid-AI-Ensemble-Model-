@@ -166,7 +166,7 @@ class AIProviderConfig(BaseModel):
     api_key: Optional[str] = Field(default=None, description="API key (if required)")
     base_url: Optional[str] = Field(default=None, description="Custom API endpoint")
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=8192, ge=100, le=100000)  # Increased for complete responses
+    max_tokens: int = Field(default=16384, ge=100, le=100000)  # High limit for complete responses
     enabled: bool = Field(default=True)
 
     # Weight in ensemble
@@ -824,65 +824,65 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
             # Also check full section for keywords if header is short
             section_lower = section.lower()
 
-            # 1. SINTESI SINOTTICA
+            # 1. SINTESI SINOTTICA - NO TRUNCATION
             if ('sintesi' in header and 'sinott' in header) or \
                ('sinott' in header) or \
                (not result["synoptic_summary"] and '1.' in header and 'sintesi' in section_lower):
-                result["synoptic_summary"] = full_content[:1500] if full_content else section.strip()[:1500]
+                result["synoptic_summary"] = full_content if full_content else section.strip()
 
             # 2. PATTERN IDENTIFICATI (must check BEFORE interpretazione since both have similar words)
             elif ('pattern' in header and 'identific' in header) or \
                  ('2.' in header and 'pattern' in section_lower) or \
                  (header.startswith('2') and 'pattern' in section_lower):
-                # Extract list items
+                # Extract list items - NO LIMIT on number of items
                 items = []
                 for line in section.split('\n'):
                     line = line.strip()
                     if line.startswith('-') or line.startswith('•') or line.startswith('*'):
                         items.append(line.lstrip('-•* ').strip())
                 if items:
-                    result["patterns"] = items[:8]
+                    result["patterns"] = items  # No [:8] limit
                 elif full_content:
-                    # If no list, use paragraphs
-                    result["patterns"] = [full_content[:500]]
+                    # If no list, use full content
+                    result["patterns"] = [full_content]
 
-            # 3. INTERPRETAZIONE FISICA
+            # 3. INTERPRETAZIONE FISICA - NO TRUNCATION
             elif ('interpretazione' in header and 'fisic' in header) or \
                  ('fisic' in header and 'interpretazione' in section_lower) or \
                  ('3.' in header and 'fisic' in section_lower) or \
                  ('interpretazione' in header):
-                result["physics"] = full_content[:1200] if full_content else ""
+                result["physics"] = full_content if full_content else ""
 
-            # 4. VALUTAZIONE CONFIDENZA
+            # 4. VALUTAZIONE CONFIDENZA - NO TRUNCATION
             elif ('valutazione' in header and 'confiden' in header) or \
                  ('confidenza' in header) or \
                  ('4.' in header and 'confiden' in section_lower):
-                result["confidence_text"] = full_content[:800] if full_content else ""
+                result["confidence_text"] = full_content if full_content else ""
 
-            # 5. INCERTEZZE E DIVERGENZE
+            # 5. INCERTEZZE E DIVERGENZE - NO TRUNCATION
             elif ('incertezz' in header and 'divergenz' in header) or \
                  ('incertezz' in header) or \
                  ('divergenz' in header) or \
                  ('5.' in header and ('incertezz' in section_lower or 'divergenz' in section_lower)):
-                result["uncertainty"] = full_content[:1000] if full_content else ""
+                result["uncertainty"] = full_content if full_content else ""
 
-            # 6. CONCLUSIONI CHIAVE
+            # 6. CONCLUSIONI CHIAVE - NO TRUNCATION
             elif ('conclus' in header and 'chiave' in header) or \
                  ('conclus' in header) or \
                  ('implicazioni' in header) or \
                  ('6.' in header and 'conclus' in section_lower):
-                # Extract list items OR paragraphs
+                # Extract list items OR paragraphs - NO LIMITS
                 items = []
                 for line in section.split('\n'):
                     line = line.strip()
                     if line.startswith('-') or line.startswith('•') or line.startswith('*'):
                         items.append(line.lstrip('-•* ').strip())
                 if items:
-                    result["findings"] = items[:8]
+                    result["findings"] = items  # No limit
                 elif full_content:
-                    # Split by sentences if no list
+                    # Split by sentences if no list - NO LIMIT
                     sentences = [s.strip() for s in full_content.split('.') if len(s.strip()) > 20]
-                    result["findings"] = sentences[:6] if sentences else [full_content[:400]]
+                    result["findings"] = sentences if sentences else [full_content]
 
                 # Check for warnings/alerts
                 if 'allert' in section_lower or 'avvis' in section_lower or 'critic' in section_lower:
@@ -890,10 +890,10 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
                         if 'allert' in line.lower() or 'avvis' in line.lower() or 'critic' in line.lower():
                             result["warnings"].append(line.strip().lstrip('-•* '))
 
-        # Fallback parsing if main sections not found
+        # Fallback parsing if main sections not found - NO TRUNCATION
         if not result["synoptic_summary"]:
-            # Try to find any substantial text
-            result["synoptic_summary"] = text[:1000]
+            # Try to find any substantial text - use full text
+            result["synoptic_summary"] = text
 
         if not result["physics"]:
             # Look for physics keywords in full text
@@ -904,7 +904,7 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
                     paragraphs = text.split('\n\n')
                     for para in paragraphs:
                         if keyword in para.lower() and len(para) > 100:
-                            result["physics"] = para[:1000]
+                            result["physics"] = para  # No truncation
                             break
                     if result["physics"]:
                         break
@@ -917,7 +917,7 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
                     paragraphs = text.split('\n\n')
                     for para in paragraphs:
                         if keyword in para.lower() and len(para) > 50:
-                            result["uncertainty"] = para[:800]
+                            result["uncertainty"] = para  # No truncation
                             break
                     if result["uncertainty"]:
                         break
