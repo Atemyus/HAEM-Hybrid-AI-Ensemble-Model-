@@ -727,6 +727,10 @@ def compute_ensemble(model_data: dict, forecast_hour: int):
 # SESSION STATE INITIALIZATION
 # ============================================================================
 
+# Cache version - increment this to invalidate old cached data
+AI_CACHE_VERSION = 3
+
+
 def init_session_state():
     """Initialize session state variables."""
     if 'analysis_complete' not in st.session_state:
@@ -740,6 +744,11 @@ def init_session_state():
     # Cache for AI analyses keyed by (hour, field, preset)
     if 'ai_analyses_cache' not in st.session_state:
         st.session_state.ai_analyses_cache = {}
+    # Cache version check - clear cache if version mismatch
+    if 'ai_cache_version' not in st.session_state or st.session_state.ai_cache_version != AI_CACHE_VERSION:
+        st.session_state.ai_analyses_cache = {}
+        st.session_state.ai_analyses = {}
+        st.session_state.ai_cache_version = AI_CACHE_VERSION
     if 'current_hour' not in st.session_state:
         st.session_state.current_hour = 48
     if 'selected_field' not in st.session_state:
@@ -1212,51 +1221,6 @@ def render_model_comparison(ensemble_results, hour: int):
 # AI ANALYSIS PANEL
 # ============================================================================
 
-def markdown_to_html(text: str) -> str:
-    """Convert markdown text to HTML for proper rendering inside HTML templates."""
-    if not text:
-        return ""
-
-    # Escape HTML special characters first
-    text = html.escape(str(text))
-
-    # Convert markdown bold **text** to <strong>
-    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
-
-    # Convert markdown italic *text* to <em>
-    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
-
-    # Convert markdown bullet points
-    lines = text.split('\n')
-    result_lines = []
-    in_list = False
-
-    for line in lines:
-        stripped = line.strip()
-        # Check for markdown list items (-, *, •)
-        if stripped.startswith('- ') or stripped.startswith('* ') or stripped.startswith('• '):
-            if not in_list:
-                result_lines.append('<ul style="margin: 0.5rem 0; padding-left: 1.5rem;">')
-                in_list = True
-            content = stripped[2:].strip()
-            result_lines.append(f'<li style="color: #e0e0e0; margin: 0.3rem 0;">{content}</li>')
-        elif stripped.startswith('○ ') or stripped.startswith('◦ '):
-            # Nested list item
-            content = stripped[2:].strip()
-            result_lines.append(f'<li style="color: #c0c0c0; margin: 0.2rem 0; margin-left: 1rem; list-style-type: circle;">{content}</li>')
-        else:
-            if in_list:
-                result_lines.append('</ul>')
-                in_list = False
-            if stripped:
-                result_lines.append(f'<p style="margin: 0.3rem 0; color: #e0e0e0;">{stripped}</p>')
-
-    if in_list:
-        result_lines.append('</ul>')
-
-    return '\n'.join(result_lines)
-
-
 def render_ai_card(ai_name: str, analysis: dict):
     """Render a styled AI analysis card using Streamlit components."""
     theme = get_ai_theme(ai_name)
@@ -1473,10 +1437,14 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
         for ai_name, analysis in ai_analyses.items():
             if isinstance(analysis, dict):
                 conf = analysis.get('confidence', 0)
+                # Skip error responses
+                summary = analysis.get('summary', '')
+                if 'Errore:' in str(summary) or 'Error' in str(summary):
+                    continue
                 if conf > best_confidence:
                     best_confidence = conf
                     best_ai = ai_name
-                    best_summary = analysis.get('summary', '')
+                    best_summary = summary
                     best_uncertainty = analysis.get('uncertainty', '')
                     best_physics = analysis.get('physics', '')
                     best_theme = get_ai_theme(ai_name)
@@ -1497,32 +1465,30 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
         best_theme = {'icon': '🌐', 'color': '#667eea'}
     else:
         confidence = 79
-        verdict = """I modelli concordano sulla struttura generale ma divergono sul timing.
-        ECMWF e ICON mostrano la soluzione più probabile (65% probabilità).
-        Scenario alternativo (35%): GFS con passaggio anticipato di 6-12h e intensità maggiore."""
+        verdict = "I modelli concordano sulla struttura generale ma divergono sul timing. ECMWF e ICON mostrano la soluzione più probabile (65% probabilità). Scenario alternativo (35%): GFS con passaggio anticipato di 6-12h e intensità maggiore."
         uncertainty = ""
         physics = ""
         source = "Modalità demo"
         best_theme = {'icon': '🎯', 'color': '#667eea'}
 
-    # Convert content to safe HTML
-    verdict_content = markdown_to_html(verdict)
-    uncertainty_content = markdown_to_html(uncertainty) if uncertainty else ""
-    physics_content = markdown_to_html(physics) if physics else ""
+    # Safe escape content
+    verdict_content = html.escape(str(verdict)) if verdict else "Non disponibile"
+    uncertainty_content = html.escape(str(uncertainty)) if uncertainty else ""
+    physics_content = html.escape(str(physics)) if physics else ""
 
     # Confidence styling
     if confidence >= 80:
-        conf_class = "confidence-high"
+        conf_color = "#10b981"
         conf_label = "ALTA"
         conf_emoji = "🟢"
         gradient = "linear-gradient(90deg, #10b981, #059669)"
     elif confidence >= 60:
-        conf_class = "confidence-medium"
+        conf_color = "#eab308"
         conf_label = "MEDIA"
         conf_emoji = "🟡"
         gradient = "linear-gradient(90deg, #eab308, #ca8a04)"
     else:
-        conf_class = "confidence-low"
+        conf_color = "#ef4444"
         conf_label = "BASSA"
         conf_emoji = "🔴"
         gradient = "linear-gradient(90deg, #ef4444, #dc2626)"
@@ -1532,81 +1498,65 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
     if ensemble_results and hour in ensemble_results:
         result = ensemble_results[hour]
         if result.warnings:
-            warnings_html = "<div style='margin-top: 1rem; padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px;'>"
-            warnings_html += "<div style='color: #f87171; font-weight: 600; margin-bottom: 0.5rem;'>⚠️ Avvertenze</div>"
+            warnings_items = ""
             for w in result.warnings:
-                safe_w = html.escape(str(w))
-                warnings_html += f"<div style='color: #fca5a5;'>• {safe_w}</div>"
-            warnings_html += "</div>"
+                warnings_items += f"<div style='color: #fca5a5;'>• {html.escape(str(w))}</div>"
+            warnings_html = f"""
+<div style="margin-top: 1rem; padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px;">
+<div style="color: #f87171; font-weight: 600; margin-bottom: 0.5rem;">⚠️ Avvertenze</div>
+{warnings_items}
+</div>"""
 
     # Build physics section if available
     physics_section = ""
     if physics_content:
         physics_section = f"""
-        <div class="ai-section" style="margin-top: 1rem;">
-            <div class="ai-section-title">🔬 Interpretazione Fisica</div>
-            <div class="ai-section-content">{physics_content}</div>
-        </div>
-        """
+<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; margin-top: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+<div style="color: #a0a0a0; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">🔬 INTERPRETAZIONE FISICA</div>
+<div style="color: #e0e0e0; line-height: 1.6;">{physics_content}</div>
+</div>"""
 
     # Build uncertainty section if available
     uncertainty_section = ""
     if uncertainty_content:
         uncertainty_section = f"""
-        <div class="ai-section" style="margin-top: 1rem;">
-            <div class="ai-section-title">⚠️ Incertezze Residue</div>
-            <div class="ai-section-content">{uncertainty_content}</div>
-        </div>
-        """
+<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; margin-top: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+<div style="color: #a0a0a0; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">⚠️ INCERTEZZE RESIDUE</div>
+<div style="color: #e0e0e0; line-height: 1.6;">{uncertainty_content}</div>
+</div>"""
 
-    verdict_html = f"""
-    <div class="verdict-card">
-        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
-            <div style="font-size: 2.5rem;">{best_theme['icon'] if best_theme else '🎯'}</div>
-            <div>
-                <div class="verdict-title">Verdetto Finale Ensemble</div>
-                <div style="color: #a0a0a0; font-size: 0.9rem;">{html.escape(source)}</div>
-            </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: auto 1fr; gap: 2rem; align-items: start;">
-            <div style="text-align: center;">
-                <div style="
-                    width: 120px;
-                    height: 120px;
-                    border-radius: 50%;
-                    background: {gradient};
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    box-shadow: 0 0 30px {best_theme['color'] if best_theme else '#667eea'}44;
-                ">
-                    <div style="font-size: 2rem; font-weight: 800; color: white;">{confidence:.0f}</div>
-                    <div style="font-size: 0.7rem; color: rgba(255,255,255,0.8);">/ 100</div>
-                </div>
-                <div style="margin-top: 0.75rem;">
-                    <span class="ai-confidence {conf_class}">{conf_emoji} {conf_label}</span>
-                </div>
-            </div>
-
-            <div>
-                <div class="ai-section" style="margin: 0;">
-                    <div class="ai-section-title">📋 Sintesi Finale</div>
-                    <div class="ai-section-content" style="font-size: 1rem;">{verdict_content}</div>
-                </div>
-
-                {physics_section}
-
-                {uncertainty_section}
-
-                {warnings_html}
-            </div>
-        </div>
-    </div>
-    """
-
-    st.markdown(verdict_html, unsafe_allow_html=True)
+    # Render verdict with pure inline styles
+    st.markdown(f"""
+<div style="background: linear-gradient(145deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.1)); border-radius: 20px; padding: 2rem; margin: 1.5rem 0; border: 2px solid rgba(102, 126, 234, 0.3); box-shadow: 0 10px 40px rgba(102, 126, 234, 0.2);">
+<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+<div style="font-size: 2.5rem;">{best_theme['icon'] if best_theme else '🎯'}</div>
+<div>
+<div style="font-size: 1.5rem; font-weight: 700; background: linear-gradient(90deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem;">Verdetto Finale Ensemble</div>
+<div style="color: #a0a0a0; font-size: 0.9rem;">{html.escape(source)}</div>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: auto 1fr; gap: 2rem; align-items: start;">
+<div style="text-align: center;">
+<div style="width: 120px; height: 120px; border-radius: 50%; background: {gradient}; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 0 30px {best_theme['color'] if best_theme else '#667eea'}44;">
+<div style="font-size: 2rem; font-weight: 800; color: white;">{confidence:.0f}</div>
+<div style="font-size: 0.7rem; color: rgba(255,255,255,0.8);">/ 100</div>
+</div>
+<div style="margin-top: 0.75rem;">
+<span style="background: {conf_color}22; color: {conf_color}; padding: 0.25rem 0.75rem; border-radius: 20px; font-weight: 600; border: 1px solid {conf_color}44;">{conf_emoji} {conf_label}</span>
+</div>
+</div>
+<div>
+<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+<div style="color: #a0a0a0; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">📋 SINTESI FINALE</div>
+<div style="color: #e0e0e0; line-height: 1.6; font-size: 1rem;">{verdict_content}</div>
+</div>
+{physics_section}
+{uncertainty_section}
+{warnings_html}
+</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
 
 # ============================================================================
