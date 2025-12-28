@@ -262,7 +262,9 @@ class BaseAIAnalyzer(ABC):
         if preset_context:
             preset_instructions = f"\n**CONTESTO ANALISI**: {preset_context}\n"
 
-        prompt = f"""Sei un meteorologo esperto. Analizza i seguenti dati dei modelli NWP e fornisci una valutazione meteorologica dettagliata IN ITALIANO.
+        prompt = f"""Sei un meteorologo sinottico esperto con profonda conoscenza della fisica atmosferica.
+Analizza i seguenti dati dei modelli NWP e fornisci una valutazione meteorologica DETTAGLIATA e COMPLETA in ITALIANO.
+
 {preset_instructions}
 ## Dati Analizzati
 - **Campo Selezionato**: {selected_field.upper()} - {field_description}
@@ -273,38 +275,66 @@ class BaseAIAnalyzer(ABC):
 ## Statistiche dai Modelli NWP:
 {data_str}
 
-## Analisi Richiesta (rispondi IN ITALIANO):
+## ISTRUZIONI IMPORTANTI:
+Devi compilare TUTTI i seguenti campi con analisi DETTAGLIATE (minimo 3-4 frasi per campo).
+NON lasciare campi vuoti o con risposte brevi.
 
 ### 1. SINTESI SINOTTICA
-Descrivi la situazione sinottica prevista a +{forecast_hour}h, focalizzandoti sul campo {selected_field.upper()} ({field_description}).
+Descrivi in modo DETTAGLIATO la situazione sinottica prevista a +{forecast_hour}h:
+- Posizione e intensità dei centri d'azione principali (anticicloni, cicloni)
+- Configurazione del campo di {selected_field.upper()} ({field_description})
+- Flusso prevalente e sue caratteristiche
+- Evoluzione attesa nelle ore successive
+(Scrivi almeno 4-5 frasi complete e tecnicamente accurate)
 
 ### 2. IDENTIFICAZIONE PATTERN
-Elenca i pattern principali identificati:
-- Saccature, promontori, cut-off, blocchi
-- Centri di alta/bassa pressione
-- Zone frontali, posizione del jet stream
+Elenca E DESCRIVI i pattern meteorologici identificati:
+- Saccature: posizione, ampiezza, inclinazione dell'asse
+- Promontori: estensione, intensità
+- Cut-off o gocce fredde: presenza e caratteristiche
+- Configurazioni di blocco: tipo e stabilità
+- Posizione del jet stream: latitudine, intensità (kt), ondulazioni
+(Per ogni pattern fornisci dettagli specifici, non solo elenchi)
 
 ### 3. INTERPRETAZIONE FISICA
-Spiega PERCHÉ questi pattern esistono usando:
-- Dinamica delle onde di Rossby
-- Processi baroclini/barotropici
-- Avvezione termica
-- Interazioni con il jet stream
+Spiega i PROCESSI FISICI che determinano questa configurazione:
+- Dinamica delle onde di Rossby: numero d'onda, propagazione, gruppo vs fase
+- Processi baroclini: conversione di energia, sviluppo di cicloni
+- Avvezione termica: calda/fredda, intensità, effetti sulla struttura
+- Interazione jet-superficie: divergenza/convergenza, forzanti dinamiche
+- Vorticità: avvezione, stretching, tilting
+(Fornisci una spiegazione fisica causale completa, non superficiale)
 
 ### 4. VALUTAZIONE CONFIDENZA
-Dai un punteggio di confidenza (0-100) e spiega:
-- Livello di accordo tra i modelli
-- Prevedibilità del pattern
-- Fonti di incertezza
+**PUNTEGGIO: [inserisci un numero da 0 a 100]/100**
 
-### 5. INCERTEZZE E DIVERGENZE
-Descrivi le divergenze tra i modelli e le principali incertezze.
+Valuta la confidenza della previsione considerando:
+- Accordo tra modelli: quanto sono concordi ECMWF, GFS, ICON, ecc.?
+- Prevedibilità intrinseca: quanto è predicibile questo tipo di pattern?
+- Range temporale: +{forecast_hour}h è entro i limiti di buona prevedibilità?
+- Stabilità delle corse: le ultime run hanno mostrato continuità?
+(Giustifica il punteggio che hai dato con argomentazioni specifiche)
 
-### 6. CONCLUSIONI CHIAVE
-- Punti principali
-- Eventuali avvisi o alert meteo
+### 5. INCERTEZZE E DIVERGENZE TRA I MODELLI
+Descrivi in DETTAGLIO:
+- Quali modelli divergono e su quali aspetti (timing, posizione, intensità)
+- Scenari alternativi possibili con probabilità stimate
+- Elementi della previsione più incerti
+- Soglie critiche da monitorare
+(Non limitarti a dire "i modelli concordano", specifica le differenze)
 
-Rispondi con analisi scientificamente rigorosa e causalità fisica.
+### 6. CONCLUSIONI CHIAVE E IMPLICAZIONI METEO
+- Sintesi dei punti più importanti dell'analisi
+- Possibili impatti meteo al suolo (precipitazioni, vento, temperature)
+- Eventuali criticità o allerte da considerare
+- Raccomandazioni per il monitoraggio
+(Rendi l'analisi utile per chi deve prendere decisioni operative)
+
+IMPORTANTE:
+- Scrivi SEMPRE il punteggio nel formato "PUNTEGGIO: XX/100" nella sezione 4
+- Compila TUTTI i campi in modo dettagliato
+- Usa terminologia tecnica ma comprensibile
+- Basa le conclusioni sui dati forniti
 """
         return prompt
 
@@ -469,7 +499,7 @@ class GPT4Analyzer(BaseAIAnalyzer):
                 synoptic_summary=parsed.get("synoptic_summary", response_text[:500]),
                 pattern_identification=parsed.get("patterns", ["Analisi completata"]),
                 physical_interpretation=parsed.get("physics", ""),
-                confidence_assessment=parsed.get("confidence_text", ""),
+                confidence_assessment=parsed.get("uncertainty", parsed.get("confidence_text", "")),
                 key_findings=parsed.get("findings", []),
                 warnings=parsed.get("warnings", []),
                 confidence_score=parsed.get("confidence_score", 75.0),
@@ -558,7 +588,7 @@ class GeminiAnalyzer(BaseAIAnalyzer):
                 synoptic_summary=parsed.get("synoptic_summary", response_text[:500]),
                 pattern_identification=parsed.get("patterns", ["Analisi completata"]),
                 physical_interpretation=parsed.get("physics", ""),
-                confidence_assessment=parsed.get("confidence_text", ""),
+                confidence_assessment=parsed.get("uncertainty", parsed.get("confidence_text", "")),
                 key_findings=parsed.get("findings", []),
                 warnings=parsed.get("warnings", []),
                 confidence_score=parsed.get("confidence_score", 75.0),
@@ -667,7 +697,7 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
                 synoptic_summary=parsed.get("synoptic_summary", response_text[:500]),
                 pattern_identification=parsed.get("patterns", ["Analisi completata"]),
                 physical_interpretation=parsed.get("physics", ""),
-                confidence_assessment=parsed.get("confidence_text", ""),
+                confidence_assessment=parsed.get("uncertainty", parsed.get("confidence_text", "")),
                 key_findings=parsed.get("findings", []),
                 warnings=parsed.get("warnings", []),
                 confidence_score=parsed.get("confidence_score", 75.0),
@@ -695,32 +725,96 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
             )
 
     def _parse_response(self, text: str) -> dict:
-        """Parse the AI response."""
+        """Parse the AI response and extract confidence score."""
+        import re
+
         result = {
-            "synoptic_summary": text[:800],
+            "synoptic_summary": "",
             "patterns": [],
             "physics": "",
             "confidence_text": "",
-            "confidence_score": 75.0,
+            "confidence_score": 75.0,  # Default, will be overwritten if found
             "findings": [],
             "warnings": []
         }
 
+        # Extract confidence score using multiple patterns
+        confidence_patterns = [
+            r'PUNTEGGIO[:\s]*(\d{1,3})\s*/\s*100',  # PUNTEGGIO: 85/100
+            r'punteggio[:\s]*(\d{1,3})\s*/\s*100',  # punteggio: 85/100
+            r'confidenza[:\s]*(\d{1,3})\s*[%/]',     # confidenza: 85%
+            r'confidence[:\s]*(\d{1,3})\s*[%/]',     # confidence: 85%
+            r'(\d{1,3})\s*/\s*100',                  # 85/100 anywhere
+            r'(\d{1,3})\s*%',                        # 85% anywhere in confidence section
+        ]
+
+        # First try to find score in confidence-related section
+        confidence_section = ""
         sections = text.split("##")
+
         for section in sections:
             lower = section.lower()
-            if "sinott" in lower or "synoptic" in lower:
-                result["synoptic_summary"] = section.strip()[:800]
-            elif "pattern" in lower:
-                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
-                result["patterns"] = [l.lstrip("- ") for l in lines[:5]]
-            elif "fisic" in lower or "physical" in lower:
-                result["physics"] = section.strip()[:600]
-            elif "confiden" in lower or "incertezz" in lower:
-                result["confidence_text"] = section.strip()[:400]
-            elif "finding" in lower or "conclus" in lower:
-                lines = [l.strip() for l in section.split("\n") if l.strip().startswith("-")]
-                result["findings"] = [l.lstrip("- ") for l in lines[:5]]
+            if "confiden" in lower or "valutazione" in lower:
+                confidence_section = section
+                break
+
+        # Try to extract score from confidence section first
+        score_found = False
+        search_text = confidence_section if confidence_section else text
+
+        for pattern in confidence_patterns:
+            match = re.search(pattern, search_text, re.IGNORECASE)
+            if match:
+                try:
+                    score = float(match.group(1))
+                    if 0 <= score <= 100:
+                        result["confidence_score"] = score
+                        score_found = True
+                        break
+                except (ValueError, IndexError):
+                    continue
+
+        # Parse sections
+        for section in sections:
+            lower = section.lower()
+            content = section.strip()
+
+            if "sinott" in lower or "sintesi" in lower:
+                # Get content after the header line
+                lines = content.split("\n")
+                content_lines = [l for l in lines[1:] if l.strip() and not l.strip().startswith("#")]
+                result["synoptic_summary"] = "\n".join(content_lines)[:1200]
+
+            elif "pattern" in lower or "identificazione" in lower:
+                lines = [l.strip() for l in content.split("\n") if l.strip().startswith("-") or l.strip().startswith("•")]
+                result["patterns"] = [l.lstrip("- •").strip() for l in lines[:6]]
+
+            elif "fisic" in lower or "interpretazione" in lower:
+                lines = content.split("\n")
+                content_lines = [l for l in lines[1:] if l.strip() and not l.strip().startswith("#")]
+                result["physics"] = "\n".join(content_lines)[:1000]
+
+            elif "confiden" in lower or "valutazione" in lower:
+                lines = content.split("\n")
+                content_lines = [l for l in lines[1:] if l.strip() and not l.strip().startswith("#")]
+                result["confidence_text"] = "\n".join(content_lines)[:600]
+
+            elif "incertezz" in lower or "divergenz" in lower:
+                lines = content.split("\n")
+                content_lines = [l for l in lines[1:] if l.strip() and not l.strip().startswith("#")]
+                result["uncertainty"] = "\n".join(content_lines)[:800]
+
+            elif "conclus" in lower or "chiave" in lower or "implicazioni" in lower:
+                lines = [l.strip() for l in content.split("\n") if l.strip().startswith("-") or l.strip().startswith("•")]
+                result["findings"] = [l.lstrip("- •").strip() for l in lines[:6]]
+                # Also look for warnings
+                if "allert" in content.lower() or "critic" in content.lower():
+                    warning_lines = [l for l in content.split("\n") if "allert" in l.lower() or "critic" in l.lower()]
+                    result["warnings"] = [l.strip().lstrip("- •") for l in warning_lines[:3]]
+
+        # Fallback: if no synoptic summary found, use first 800 chars
+        if not result["synoptic_summary"]:
+            result["synoptic_summary"] = text[:800]
 
         return result
 
