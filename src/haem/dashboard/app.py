@@ -807,7 +807,7 @@ def render_sidebar():
     st.sidebar.subheader("📊 Campi Meteorologici")
     field_preset = st.sidebar.selectbox(
         "Preset",
-        ["Analisi Sinottica", "Analisi Convettiva", "Meteo Invernale", "Completo"],
+        ["Analisi Sinottica", "Analisi Convettiva", "Meteo Invernale", "Freddo/Blocking", "Completo"],
         index=0,
     )
 
@@ -815,6 +815,7 @@ def render_sidebar():
         "Analisi Sinottica": FieldPresets.synoptic_analysis(),
         "Analisi Convettiva": FieldPresets.convective_analysis(),
         "Meteo Invernale": FieldPresets.winter_weather(),
+        "Freddo/Blocking": FieldPresets.cold_blocking_dynamics(),
         "Completo": FieldPresets.full_analysis(),
     }
     field_selection = preset_map[field_preset]

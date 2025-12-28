@@ -312,3 +312,33 @@ class FieldPresets:
             iso0_z500_1000=True,
             sbcape_li=True,
         )
+
+    @staticmethod
+    def cold_blocking_dynamics() -> FieldSelection:
+        """Fields for cold waves and blocking anticyclone analysis.
+
+        Optimized for:
+        - Arctic/Siberian cold outbreaks
+        - Sudden Stratospheric Warming events
+        - Blocking patterns and Rex blocks
+        - Meridional flow analysis
+        """
+        return FieldSelection(
+            # Surface impact
+            temp_2m=True,
+            # Synoptic-scale thermal structure
+            temp_850hpa=True,
+            temp_850hpa_anomaly=True,  # Critical: shows how anomalous the cold is
+            temp_500hpa=True,
+            # Stratospheric monitoring (SSW precursor)
+            temp_10hpa_strat=True,
+            # Jet stream deflection around blocks
+            jet_stream=True,
+            # Tropopause dynamics
+            altitude_1_5_pvu=True,
+            # Blocking pattern identification
+            pressure_geop_500hpa=True,
+            anomaly_geop_500hpa=True,  # Critical: shows blocking intensity
+            # Cold air depth
+            iso0_z500_1000=True,
+        )
