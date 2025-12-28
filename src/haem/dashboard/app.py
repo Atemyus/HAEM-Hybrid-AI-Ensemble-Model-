@@ -1258,7 +1258,7 @@ def markdown_to_html(text: str) -> str:
 
 
 def render_ai_card(ai_name: str, analysis: dict):
-    """Render a styled AI analysis card."""
+    """Render a styled AI analysis card using Streamlit components."""
     theme = get_ai_theme(ai_name)
 
     if isinstance(analysis, dict):
@@ -1280,115 +1280,129 @@ def render_ai_card(ai_name: str, analysis: dict):
         findings = getattr(analysis, 'key_findings', [])
         alert_warnings = getattr(analysis, 'warnings', [])
 
-    # Convert text content to safe HTML
-    summary_html = markdown_to_html(summary)
-    physics_html = markdown_to_html(physics) if physics else '<span style="color: #808080;">Non disponibile</span>'
-    uncertainty_html = markdown_to_html(uncertainty) if uncertainty else '<span style="color: #808080;">Non disponibile</span>'
+    # Check if this is an error response
+    is_error = isinstance(summary, str) and ('Errore:' in summary or 'Error' in summary or 'credit balance' in summary.lower())
 
-    # Confidence class
+    # Confidence styling
     if confidence >= 80:
-        conf_class = "confidence-high"
+        conf_color = "#10b981"
         conf_emoji = "🟢"
     elif confidence >= 60:
-        conf_class = "confidence-medium"
+        conf_color = "#eab308"
         conf_emoji = "🟡"
     else:
-        conf_class = "confidence-low"
+        conf_color = "#ef4444"
         conf_emoji = "🔴"
 
-    # Build patterns HTML
-    patterns_html = ""
-    if patterns and isinstance(patterns, list) and len(patterns) > 0:
-        patterns_html = "<ul style='margin: 0; padding-left: 1.2rem;'>"
-        for p in patterns[:4]:
-            safe_p = html.escape(str(p))
-            patterns_html += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{safe_p}</li>"
-        patterns_html += "</ul>"
+    # Use container for the card
+    with st.container():
+        # Header
+        time_str = f" • {inference_time:.0f}ms" if inference_time > 0 else ""
+        st.markdown(f"""
+<div style="background: linear-gradient(145deg, rgba(30, 30, 50, 0.9), rgba(20, 20, 40, 0.95)); border-left: 4px solid {theme['color']}; border-radius: 16px; padding: 1.5rem; margin: 1rem 0; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+<div style="display: flex; align-items: center; gap: 0.5rem;">
+<span style="font-size: 1.5rem;">{theme['icon']}</span>
+<span style="font-size: 1.3rem; font-weight: 700; color: {theme['color']};">{ai_name}</span>
+</div>
+<div style="display: flex; gap: 0.5rem; align-items: center;">
+<span style="background: {conf_color}22; color: {conf_color}; padding: 0.25rem 0.75rem; border-radius: 20px; font-weight: 600; border: 1px solid {conf_color}44;">{conf_emoji} {confidence:.0f}/100</span>
+<span style="color: #808080; font-size: 0.8rem;">{time_str}</span>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
-    # Build findings HTML
-    findings_html = ""
-    if findings and isinstance(findings, list) and len(findings) > 0:
-        findings_html = "<ul style='margin: 0; padding-left: 1.2rem;'>"
-        for f in findings[:4]:
-            safe_f = html.escape(str(f))
-            findings_html += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{safe_f}</li>"
-        findings_html += "</ul>"
+        if is_error:
+            # Show error in a styled box
+            st.markdown(f"""
+<div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem;">
+<div style="color: #f87171; font-weight: 600; margin-bottom: 0.5rem;">⚠️ Errore API</div>
+<div style="color: #fca5a5; font-size: 0.9rem;">Crediti API insufficienti o errore di connessione. Verifica il tuo account.</div>
+</div>
+""", unsafe_allow_html=True)
+        else:
+            # Synoptic Summary
+            safe_summary = html.escape(str(summary)) if summary else "Non disponibile"
+            st.markdown(f"""
+<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; border: 1px solid rgba(255,255,255,0.05);">
+<div style="color: #a0a0a0; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">📋 SINTESI SINOTTICA</div>
+<div style="color: #e0e0e0; line-height: 1.6;">{safe_summary}</div>
+</div>
+""", unsafe_allow_html=True)
 
-    # Build warnings HTML
-    warnings_html = ""
-    if alert_warnings and isinstance(alert_warnings, list) and len(alert_warnings) > 0:
-        warnings_html = "<div style='background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem;'>"
-        warnings_html += "<div style='color: #f87171; font-weight: 600; margin-bottom: 0.5rem;'>⚠️ Avvisi</div>"
-        for w in alert_warnings[:3]:
-            safe_w = html.escape(str(w))
-            warnings_html += f"<div style='color: #fca5a5; font-size: 0.9rem;'>• {safe_w}</div>"
-        warnings_html += "</div>"
+            # Physics and Uncertainty side by side
+            safe_physics = html.escape(str(physics)) if physics else "<span style='color:#606060;'>Non disponibile</span>"
+            safe_uncertainty = html.escape(str(uncertainty)) if uncertainty else "<span style='color:#606060;'>Non disponibile</span>"
 
-    # Show patterns/findings section only if we have content
-    extra_section = ""
-    if patterns_html or findings_html:
-        extra_section = f"""
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem;">
-            <div class="ai-section" style="margin: 0;">
-                <div class="ai-section-title">🎯 Pattern Identificati</div>
-                <div class="ai-section-content">{patterns_html if patterns_html else '<span style="color: #808080;">Nessun pattern specifico</span>'}</div>
-            </div>
-            <div class="ai-section" style="margin: 0;">
-                <div class="ai-section-title">📌 Conclusioni Chiave</div>
-                <div class="ai-section-content">{findings_html if findings_html else '<span style="color: #808080;">In elaborazione...</span>'}</div>
-            </div>
-        </div>
-        """
+            st.markdown(f"""
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+<div style="color: #a0a0a0; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">🔬 INTERPRETAZIONE FISICA</div>
+<div style="color: #e0e0e0; line-height: 1.6;">{safe_physics}</div>
+</div>
+<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+<div style="color: #a0a0a0; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">⚠️ INCERTEZZE E DIVERGENZE</div>
+<div style="color: #e0e0e0; line-height: 1.6;">{safe_uncertainty}</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
-    card_html = f"""
-    <div class="ai-card ai-card-{theme['class']}">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
-            <div class="ai-header">
-                <span style="font-size: 1.5rem;">{theme['icon']}</span>
-                <span>{html.escape(ai_name)}</span>
-            </div>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <span class="ai-confidence {conf_class}">
-                    {conf_emoji} {confidence:.0f}/100
-                </span>
-                {f'<span style="color: #808080; font-size: 0.8rem;">{inference_time:.0f}ms</span>' if inference_time > 0 else ''}
-            </div>
-        </div>
+            # Patterns and Findings
+            if (patterns and len(patterns) > 0) or (findings and len(findings) > 0):
+                patterns_items = ""
+                if patterns and len(patterns) > 0:
+                    for p in patterns[:4]:
+                        patterns_items += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{html.escape(str(p))}</li>"
+                    patterns_list = f"<ul style='margin: 0; padding-left: 1.2rem;'>{patterns_items}</ul>"
+                else:
+                    patterns_list = "<span style='color:#606060;'>Nessun pattern</span>"
 
-        <div class="ai-section">
-            <div class="ai-section-title">📋 Sintesi Sinottica</div>
-            <div class="ai-section-content">{summary_html}</div>
-        </div>
+                findings_items = ""
+                if findings and len(findings) > 0:
+                    for f in findings[:4]:
+                        findings_items += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{html.escape(str(f))}</li>"
+                    findings_list = f"<ul style='margin: 0; padding-left: 1.2rem;'>{findings_items}</ul>"
+                else:
+                    findings_list = "<span style='color:#606060;'>In elaborazione...</span>"
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div class="ai-section" style="margin: 0.75rem 0;">
-                <div class="ai-section-title">🔬 Interpretazione Fisica</div>
-                <div class="ai-section-content">{physics_html}</div>
-            </div>
+                st.markdown(f"""
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem;">
+<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+<div style="color: #a0a0a0; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">🎯 PATTERN IDENTIFICATI</div>
+<div style="color: #e0e0e0;">{patterns_list}</div>
+</div>
+<div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+<div style="color: #a0a0a0; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.5rem;">📌 CONCLUSIONI CHIAVE</div>
+<div style="color: #e0e0e0;">{findings_list}</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
-            <div class="ai-section" style="margin: 0.75rem 0;">
-                <div class="ai-section-title">⚠️ Incertezze e Divergenze</div>
-                <div class="ai-section-content">{uncertainty_html}</div>
-            </div>
-        </div>
+        # Warnings
+        if alert_warnings and len(alert_warnings) > 0:
+            warnings_items = ""
+            for w in alert_warnings[:3]:
+                warnings_items += f"<div style='color: #fca5a5; font-size: 0.9rem;'>• {html.escape(str(w))}</div>"
+            st.markdown(f"""
+<div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem;">
+<div style="color: #f87171; font-weight: 600; margin-bottom: 0.5rem;">⚠️ Avvisi</div>
+{warnings_items}
+</div>
+""", unsafe_allow_html=True)
 
-        {extra_section}
-
-        {warnings_html}
-
-        <div style="margin-top: 1rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                <span style="color: #808080; font-size: 0.85rem;">Livello di Confidenza</span>
-                <span style="color: {theme['color']}; font-weight: 600;">{confidence:.0f}%</span>
-            </div>
-            <div style="background: rgba(255,255,255,0.1); border-radius: 10px; height: 8px; overflow: hidden;">
-                <div style="background: linear-gradient(90deg, {theme['color']}, {theme['color']}88); height: 100%; width: {confidence}%; border-radius: 10px; transition: width 0.5s ease;"></div>
-            </div>
-        </div>
-    </div>
-    """
-
-    st.markdown(card_html, unsafe_allow_html=True)
+        # Confidence bar and close card
+        st.markdown(f"""
+<div style="margin-top: 1rem;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+<span style="color: #808080; font-size: 0.85rem;">Livello di Confidenza</span>
+<span style="color: {theme['color']}; font-weight: 600;">{confidence:.0f}%</span>
+</div>
+<div style="background: rgba(255,255,255,0.1); border-radius: 10px; height: 8px; overflow: hidden;">
+<div style="background: linear-gradient(90deg, {theme['color']}, {theme['color']}88); height: 100%; width: {confidence}%; border-radius: 10px;"></div>
+</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
 
 def render_ai_analysis(ai_analyses: dict, hour: int):
