@@ -933,7 +933,10 @@ def render_sidebar():
 
     # Run button
     st.sidebar.markdown("---")
-    run_analysis = st.sidebar.button("🚀 ESEGUI ANALISI", use_container_width=True)
+    run_analysis = st.sidebar.button("🔄 AGGIORNA DATI METEO", use_container_width=True)
+    st.sidebar.caption("⚠️ Scarica nuovi dati e resetta la cache AI")
+    st.sidebar.markdown("---")
+    st.sidebar.info("💡 Cambiare campo/ora/preset usa automaticamente la cache se disponibile")
 
     return {
         'models': selected_models,
@@ -1777,10 +1780,19 @@ def main():
 
     # Check if we have cached analysis for this combination
     cached_analysis = get_cached_ai_analysis(current_hour, current_field, current_preset)
+    cache_count = len(st.session_state.ai_analyses_cache)
 
     if cached_analysis:
         # Use cached analysis - no API call needed
         st.session_state.ai_analyses = cached_analysis
+        # Show cache indicator
+        st.markdown(
+            f'<div style="background: linear-gradient(135deg, #1a472a, #2d5a3d); border-radius: 8px; '
+            f'padding: 8px 16px; margin-bottom: 10px; display: inline-block;">'
+            f'<span style="color: #4ade80;">💾 Cache utilizzata</span> '
+            f'<span style="color: #a0a0a0;">({cache_count} analisi in memoria)</span></div>',
+            unsafe_allow_html=True
+        )
     elif st.session_state.model_data and config['ai_configs']:
         # No cache found - need to run AI analysis
         with st.spinner(f"🤖 Generazione analisi AI per {current_field.upper()} +{current_hour}h ({current_preset})..."):
@@ -1799,6 +1811,15 @@ def main():
                 # Cache the results
                 cache_ai_analysis(current_hour, current_field, current_preset, ai_analyses)
                 st.session_state.ai_analyses = ai_analyses
+                # Show new API call indicator
+                new_cache_count = len(st.session_state.ai_analyses_cache)
+                st.markdown(
+                    f'<div style="background: linear-gradient(135deg, #4a3a1a, #5a4a2d); border-radius: 8px; '
+                    f'padding: 8px 16px; margin-bottom: 10px; display: inline-block;">'
+                    f'<span style="color: #fbbf24;">🌐 Nuova analisi AI</span> '
+                    f'<span style="color: #a0a0a0;">(salvata in cache - {new_cache_count} totali)</span></div>',
+                    unsafe_allow_html=True
+                )
             except Exception as e:
                 st.error(f"Errore nell'analisi AI: {e}")
             finally:
