@@ -725,7 +725,7 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
             )
 
     def _parse_response(self, text: str) -> dict:
-        """Parse the AI response and extract confidence score."""
+        """Parse the AI response and extract all fields properly."""
         import re
 
         result = {
@@ -733,88 +733,166 @@ class AIMLAPIAnalyzer(BaseAIAnalyzer):
             "patterns": [],
             "physics": "",
             "confidence_text": "",
-            "confidence_score": 75.0,  # Default, will be overwritten if found
+            "confidence_score": 75.0,
+            "uncertainty": "",
             "findings": [],
             "warnings": []
         }
 
         # Extract confidence score using multiple patterns
         confidence_patterns = [
-            r'PUNTEGGIO[:\s]*(\d{1,3})\s*/\s*100',  # PUNTEGGIO: 85/100
-            r'punteggio[:\s]*(\d{1,3})\s*/\s*100',  # punteggio: 85/100
-            r'confidenza[:\s]*(\d{1,3})\s*[%/]',     # confidenza: 85%
-            r'confidence[:\s]*(\d{1,3})\s*[%/]',     # confidence: 85%
-            r'(\d{1,3})\s*/\s*100',                  # 85/100 anywhere
-            r'(\d{1,3})\s*%',                        # 85% anywhere in confidence section
+            r'PUNTEGGIO[:\s]*(\d{1,3})\s*/\s*100',
+            r'punteggio[:\s]*(\d{1,3})\s*/\s*100',
+            r'\*\*PUNTEGGIO[:\s]*(\d{1,3})',
+            r'confidenza[:\s]*(\d{1,3})\s*[%/]',
+            r'(\d{1,3})\s*/\s*100',
         ]
 
-        # First try to find score in confidence-related section
-        confidence_section = ""
-        sections = text.split("##")
-
-        for section in sections:
-            lower = section.lower()
-            if "confiden" in lower or "valutazione" in lower:
-                confidence_section = section
-                break
-
-        # Try to extract score from confidence section first
-        score_found = False
-        search_text = confidence_section if confidence_section else text
-
         for pattern in confidence_patterns:
-            match = re.search(pattern, search_text, re.IGNORECASE)
+            match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 try:
                     score = float(match.group(1))
                     if 0 <= score <= 100:
                         result["confidence_score"] = score
-                        score_found = True
                         break
                 except (ValueError, IndexError):
                     continue
 
-        # Parse sections
+        # Split by ### or ## headers
+        section_pattern = r'(?:^|\n)(?:###?\s*\d*\.?\s*)(.*?)(?=\n###?\s*\d*\.?\s*|\Z)'
+
+        # Alternative: split by numbered sections or ## markers
+        sections = re.split(r'\n(?:#{2,3}\s*\d*\.?\s*)', text)
+
+        # Also try splitting by numbered patterns like "1." "2." etc at start of lines
+        if len(sections) < 3:
+            sections = re.split(r'\n(?=\d+\.\s+[A-Z])', text)
+
         for section in sections:
-            lower = section.lower()
-            content = section.strip()
+            if not section.strip():
+                continue
 
-            if "sinott" in lower or "sintesi" in lower:
-                # Get content after the header line
-                lines = content.split("\n")
-                content_lines = [l for l in lines[1:] if l.strip() and not l.strip().startswith("#")]
-                result["synoptic_summary"] = "\n".join(content_lines)[:1200]
+            # Get first line as header, rest as content
+            lines = section.strip().split('\n')
+            header = lines[0].lower() if lines else ""
+            content_lines = lines[1:] if len(lines) > 1 else []
+            full_content = '\n'.join(content_lines).strip()
 
-            elif "pattern" in lower or "identificazione" in lower:
-                lines = [l.strip() for l in content.split("\n") if l.strip().startswith("-") or l.strip().startswith("•")]
-                result["patterns"] = [l.lstrip("- •").strip() for l in lines[:6]]
+            # Also check full section for keywords if header is short
+            section_lower = section.lower()
 
-            elif "fisic" in lower or "interpretazione" in lower:
-                lines = content.split("\n")
-                content_lines = [l for l in lines[1:] if l.strip() and not l.strip().startswith("#")]
-                result["physics"] = "\n".join(content_lines)[:1000]
+            # 1. SINTESI SINOTTICA
+            if ('sintesi' in header and 'sinott' in header) or \
+               ('sinott' in header) or \
+               (not result["synoptic_summary"] and '1.' in header and 'sintesi' in section_lower):
+                result["synoptic_summary"] = full_content[:1500] if full_content else section.strip()[:1500]
 
-            elif "confiden" in lower or "valutazione" in lower:
-                lines = content.split("\n")
-                content_lines = [l for l in lines[1:] if l.strip() and not l.strip().startswith("#")]
-                result["confidence_text"] = "\n".join(content_lines)[:600]
+            # 2. PATTERN IDENTIFICATI (must check BEFORE interpretazione since both have similar words)
+            elif ('pattern' in header and 'identific' in header) or \
+                 ('2.' in header and 'pattern' in section_lower) or \
+                 (header.startswith('2') and 'pattern' in section_lower):
+                # Extract list items
+                items = []
+                for line in section.split('\n'):
+                    line = line.strip()
+                    if line.startswith('-') or line.startswith('•') or line.startswith('*'):
+                        items.append(line.lstrip('-•* ').strip())
+                if items:
+                    result["patterns"] = items[:8]
+                elif full_content:
+                    # If no list, use paragraphs
+                    result["patterns"] = [full_content[:500]]
 
-            elif "incertezz" in lower or "divergenz" in lower:
-                lines = content.split("\n")
-                content_lines = [l for l in lines[1:] if l.strip() and not l.strip().startswith("#")]
-                result["uncertainty"] = "\n".join(content_lines)[:800]
+            # 3. INTERPRETAZIONE FISICA
+            elif ('interpretazione' in header and 'fisic' in header) or \
+                 ('fisic' in header and 'interpretazione' in section_lower) or \
+                 ('3.' in header and 'fisic' in section_lower) or \
+                 ('interpretazione' in header):
+                result["physics"] = full_content[:1200] if full_content else ""
 
-            elif "conclus" in lower or "chiave" in lower or "implicazioni" in lower:
-                lines = [l.strip() for l in content.split("\n") if l.strip().startswith("-") or l.strip().startswith("•")]
-                result["findings"] = [l.lstrip("- •").strip() for l in lines[:6]]
-                # Also look for warnings
-                if "allert" in content.lower() or "critic" in content.lower():
-                    warning_lines = [l for l in content.split("\n") if "allert" in l.lower() or "critic" in l.lower()]
-                    result["warnings"] = [l.strip().lstrip("- •") for l in warning_lines[:3]]
+            # 4. VALUTAZIONE CONFIDENZA
+            elif ('valutazione' in header and 'confiden' in header) or \
+                 ('confidenza' in header) or \
+                 ('4.' in header and 'confiden' in section_lower):
+                result["confidence_text"] = full_content[:800] if full_content else ""
 
-        # Fallback: if no synoptic summary found, use first 800 chars
+            # 5. INCERTEZZE E DIVERGENZE
+            elif ('incertezz' in header and 'divergenz' in header) or \
+                 ('incertezz' in header) or \
+                 ('divergenz' in header) or \
+                 ('5.' in header and ('incertezz' in section_lower or 'divergenz' in section_lower)):
+                result["uncertainty"] = full_content[:1000] if full_content else ""
+
+            # 6. CONCLUSIONI CHIAVE
+            elif ('conclus' in header and 'chiave' in header) or \
+                 ('conclus' in header) or \
+                 ('implicazioni' in header) or \
+                 ('6.' in header and 'conclus' in section_lower):
+                # Extract list items OR paragraphs
+                items = []
+                for line in section.split('\n'):
+                    line = line.strip()
+                    if line.startswith('-') or line.startswith('•') or line.startswith('*'):
+                        items.append(line.lstrip('-•* ').strip())
+                if items:
+                    result["findings"] = items[:8]
+                elif full_content:
+                    # Split by sentences if no list
+                    sentences = [s.strip() for s in full_content.split('.') if len(s.strip()) > 20]
+                    result["findings"] = sentences[:6] if sentences else [full_content[:400]]
+
+                # Check for warnings/alerts
+                if 'allert' in section_lower or 'avvis' in section_lower or 'critic' in section_lower:
+                    for line in section.split('\n'):
+                        if 'allert' in line.lower() or 'avvis' in line.lower() or 'critic' in line.lower():
+                            result["warnings"].append(line.strip().lstrip('-•* '))
+
+        # Fallback parsing if main sections not found
         if not result["synoptic_summary"]:
-            result["synoptic_summary"] = text[:800]
+            # Try to find any substantial text
+            result["synoptic_summary"] = text[:1000]
+
+        if not result["physics"]:
+            # Look for physics keywords in full text
+            physics_keywords = ['rossby', 'baroclino', 'avvezione', 'vorticità', 'jet stream', 'dinamica']
+            for keyword in physics_keywords:
+                if keyword in text.lower():
+                    # Find the paragraph containing this keyword
+                    paragraphs = text.split('\n\n')
+                    for para in paragraphs:
+                        if keyword in para.lower() and len(para) > 100:
+                            result["physics"] = para[:1000]
+                            break
+                    if result["physics"]:
+                        break
+
+        if not result["uncertainty"]:
+            # Look for uncertainty keywords
+            uncertainty_keywords = ['incertezza', 'divergenza', 'modelli', 'differenz']
+            for keyword in uncertainty_keywords:
+                if keyword in text.lower():
+                    paragraphs = text.split('\n\n')
+                    for para in paragraphs:
+                        if keyword in para.lower() and len(para) > 50:
+                            result["uncertainty"] = para[:800]
+                            break
+                    if result["uncertainty"]:
+                        break
+
+        if not result["findings"]:
+            # Look for conclusions keywords
+            conclusion_keywords = ['conclus', 'sintesi', 'riassumendo', 'in definitiva']
+            for keyword in conclusion_keywords:
+                if keyword in text.lower():
+                    paragraphs = text.split('\n\n')
+                    for para in paragraphs:
+                        if keyword in para.lower():
+                            sentences = [s.strip() for s in para.split('.') if len(s.strip()) > 15]
+                            result["findings"] = sentences[:5]
+                            break
+                    if result["findings"]:
+                        break
 
         return result
 
