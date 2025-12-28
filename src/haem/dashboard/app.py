@@ -728,7 +728,7 @@ def compute_ensemble(model_data: dict, forecast_hour: int):
 # ============================================================================
 
 # Cache version - increment this to invalidate old cached data
-AI_CACHE_VERSION = 5
+AI_CACHE_VERSION = 6
 
 
 def init_session_state():
@@ -1178,21 +1178,38 @@ def render_map_panel(ensemble_data, hour: int, field_type: str):
 # MODEL COMPARISON
 # ============================================================================
 
-def render_model_comparison(ensemble_results, hour: int):
-    """Render model comparison chart."""
+def render_model_comparison(ensemble_results, hour: int, selected_field: str = "z500"):
+    """Render model comparison chart with field-specific information."""
 
-    st.subheader("📊 Confronto Modelli")
+    # Field display names
+    field_names = {
+        'z500': 'Z500', 'z850': 'Z850', 't850': 'T850', 't500': 'T500',
+        'slp': 'SLP', 't2m': 'T2m', 'precip': 'Precip', 'snow': 'Neve',
+        'wind_10m': 'Vento', 'wind_300': 'Jet', 'cape': 'CAPE', 'spread': 'Spread'
+    }
+    field_display = field_names.get(selected_field, selected_field.upper())
+
+    st.subheader(f"📊 Confronto Modelli - {field_display} (+{hour}h)")
 
     if ensemble_results is None or hour not in ensemble_results:
         # Demo data
         models = ['ECMWF', 'GFS', 'ICON', 'GEM', 'ARPEGE']
         weights = [0.89, 0.72, 0.81, 0.65, 0.78]
         colors = ['#2ecc71', '#3498db', '#9b59b6', '#e74c3c', '#f1c40f']
+        spread_value = None
     else:
         result = ensemble_results[hour]
         models = [mw.model.value.upper() for mw in result.model_weights]
         weights = [mw.combined_weight for mw in result.model_weights]
         colors = ['#2ecc71', '#3498db', '#9b59b6', '#e74c3c', '#f1c40f'][:len(models)]
+
+        # Get field-specific spread if available
+        spread_value = None
+        field_data = getattr(result, selected_field, None)
+        if field_data is not None and hasattr(field_data, 'ensemble_spread'):
+            spread_array = field_data.ensemble_spread
+            if spread_array is not None and spread_array.size > 0:
+                spread_value = float(np.nanmean(spread_array))
 
     # Create horizontal bar chart
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -1210,7 +1227,7 @@ def render_model_comparison(ensemble_results, hour: int):
         ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2,
                 f'{weight*100:.0f}%', va='center', fontsize=10)
 
-    # Calculate agreement
+    # Calculate agreement based on weight variance
     agreement = np.std(weights)
     agreement_level = "Alto" if agreement < 0.1 else "Moderato" if agreement < 0.2 else "Basso"
 
@@ -1219,6 +1236,44 @@ def render_model_comparison(ensemble_results, hour: int):
 
     st.pyplot(fig)
     plt.close(fig)
+
+    # Show field-specific spread information
+    if spread_value is not None:
+        # Determine spread interpretation based on field type
+        if selected_field in ['z500', 'z850']:
+            spread_desc = f"{spread_value:.1f} dam"
+            if spread_value < 2:
+                spread_quality = "🟢 Ottimo accordo"
+            elif spread_value < 5:
+                spread_quality = "🟡 Accordo moderato"
+            else:
+                spread_quality = "🔴 Alta incertezza"
+        elif selected_field in ['t850', 't500', 't2m']:
+            spread_desc = f"{spread_value:.1f}°C"
+            if spread_value < 1:
+                spread_quality = "🟢 Ottimo accordo"
+            elif spread_value < 3:
+                spread_quality = "🟡 Accordo moderato"
+            else:
+                spread_quality = "🔴 Alta incertezza"
+        elif selected_field in ['precip', 'snow']:
+            spread_desc = f"{spread_value:.1f} mm"
+            if spread_value < 2:
+                spread_quality = "🟢 Ottimo accordo"
+            elif spread_value < 10:
+                spread_quality = "🟡 Accordo moderato"
+            else:
+                spread_quality = "🔴 Alta incertezza"
+        else:
+            spread_desc = f"{spread_value:.2f}"
+            spread_quality = "📊 Spread ensemble"
+
+        st.markdown(f"""
+        <div style="background: #1e1e2e; border-radius: 8px; padding: 10px; margin-top: 10px;">
+            <strong>Spread {field_display}:</strong> {spread_desc}<br>
+            <span style="font-size: 0.9em;">{spread_quality}</span>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 # ============================================================================
@@ -1883,7 +1938,7 @@ def main():
         )
 
     with col_sidebar:
-        render_model_comparison(st.session_state.ensemble_results, current_hour)
+        render_model_comparison(st.session_state.ensemble_results, current_hour, st.session_state.selected_field)
 
     st.markdown("---")
 
