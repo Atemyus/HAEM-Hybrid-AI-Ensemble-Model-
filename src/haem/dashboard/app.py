@@ -6,7 +6,9 @@ with multi-AI interpretation.
 """
 
 import asyncio
+import html
 import logging
+import re
 import warnings
 from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta
@@ -1210,6 +1212,51 @@ def render_model_comparison(ensemble_results, hour: int):
 # AI ANALYSIS PANEL
 # ============================================================================
 
+def markdown_to_html(text: str) -> str:
+    """Convert markdown text to HTML for proper rendering inside HTML templates."""
+    if not text:
+        return ""
+
+    # Escape HTML special characters first
+    text = html.escape(str(text))
+
+    # Convert markdown bold **text** to <strong>
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+
+    # Convert markdown italic *text* to <em>
+    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+
+    # Convert markdown bullet points
+    lines = text.split('\n')
+    result_lines = []
+    in_list = False
+
+    for line in lines:
+        stripped = line.strip()
+        # Check for markdown list items (-, *, •)
+        if stripped.startswith('- ') or stripped.startswith('* ') or stripped.startswith('• '):
+            if not in_list:
+                result_lines.append('<ul style="margin: 0.5rem 0; padding-left: 1.5rem;">')
+                in_list = True
+            content = stripped[2:].strip()
+            result_lines.append(f'<li style="color: #e0e0e0; margin: 0.3rem 0;">{content}</li>')
+        elif stripped.startswith('○ ') or stripped.startswith('◦ '):
+            # Nested list item
+            content = stripped[2:].strip()
+            result_lines.append(f'<li style="color: #c0c0c0; margin: 0.2rem 0; margin-left: 1rem; list-style-type: circle;">{content}</li>')
+        else:
+            if in_list:
+                result_lines.append('</ul>')
+                in_list = False
+            if stripped:
+                result_lines.append(f'<p style="margin: 0.3rem 0; color: #e0e0e0;">{stripped}</p>')
+
+    if in_list:
+        result_lines.append('</ul>')
+
+    return '\n'.join(result_lines)
+
+
 def render_ai_card(ai_name: str, analysis: dict):
     """Render a styled AI analysis card."""
     theme = get_ai_theme(ai_name)
@@ -1222,7 +1269,7 @@ def render_ai_card(ai_name: str, analysis: dict):
         inference_time = analysis.get('inference_time_ms', 0)
         patterns = analysis.get('patterns', [])
         findings = analysis.get('findings', [])
-        warnings = analysis.get('warnings', [])
+        alert_warnings = analysis.get('warnings', [])
     else:
         confidence = getattr(analysis, 'confidence_score', 75)
         summary = getattr(analysis, 'synoptic_summary', 'Analisi non disponibile')
@@ -1231,7 +1278,12 @@ def render_ai_card(ai_name: str, analysis: dict):
         inference_time = getattr(analysis, 'inference_time_ms', 0)
         patterns = getattr(analysis, 'pattern_identification', [])
         findings = getattr(analysis, 'key_findings', [])
-        warnings = getattr(analysis, 'warnings', [])
+        alert_warnings = getattr(analysis, 'warnings', [])
+
+    # Convert text content to safe HTML
+    summary_html = markdown_to_html(summary)
+    physics_html = markdown_to_html(physics) if physics else '<span style="color: #808080;">Non disponibile</span>'
+    uncertainty_html = markdown_to_html(uncertainty) if uncertainty else '<span style="color: #808080;">Non disponibile</span>'
 
     # Confidence class
     if confidence >= 80:
@@ -1246,35 +1298,54 @@ def render_ai_card(ai_name: str, analysis: dict):
 
     # Build patterns HTML
     patterns_html = ""
-    if patterns and isinstance(patterns, list):
+    if patterns and isinstance(patterns, list) and len(patterns) > 0:
         patterns_html = "<ul style='margin: 0; padding-left: 1.2rem;'>"
         for p in patterns[:4]:
-            patterns_html += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{p}</li>"
+            safe_p = html.escape(str(p))
+            patterns_html += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{safe_p}</li>"
         patterns_html += "</ul>"
 
     # Build findings HTML
     findings_html = ""
-    if findings and isinstance(findings, list):
+    if findings and isinstance(findings, list) and len(findings) > 0:
         findings_html = "<ul style='margin: 0; padding-left: 1.2rem;'>"
         for f in findings[:4]:
-            findings_html += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{f}</li>"
+            safe_f = html.escape(str(f))
+            findings_html += f"<li style='color: #c0c0c0; margin: 0.3rem 0;'>{safe_f}</li>"
         findings_html += "</ul>"
 
     # Build warnings HTML
     warnings_html = ""
-    if warnings and isinstance(warnings, list) and len(warnings) > 0:
+    if alert_warnings and isinstance(alert_warnings, list) and len(alert_warnings) > 0:
         warnings_html = "<div style='background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem;'>"
         warnings_html += "<div style='color: #f87171; font-weight: 600; margin-bottom: 0.5rem;'>⚠️ Avvisi</div>"
-        for w in warnings[:3]:
-            warnings_html += f"<div style='color: #fca5a5; font-size: 0.9rem;'>• {w}</div>"
+        for w in alert_warnings[:3]:
+            safe_w = html.escape(str(w))
+            warnings_html += f"<div style='color: #fca5a5; font-size: 0.9rem;'>• {safe_w}</div>"
         warnings_html += "</div>"
+
+    # Show patterns/findings section only if we have content
+    extra_section = ""
+    if patterns_html or findings_html:
+        extra_section = f"""
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem;">
+            <div class="ai-section" style="margin: 0;">
+                <div class="ai-section-title">🎯 Pattern Identificati</div>
+                <div class="ai-section-content">{patterns_html if patterns_html else '<span style="color: #808080;">Nessun pattern specifico</span>'}</div>
+            </div>
+            <div class="ai-section" style="margin: 0;">
+                <div class="ai-section-title">📌 Conclusioni Chiave</div>
+                <div class="ai-section-content">{findings_html if findings_html else '<span style="color: #808080;">In elaborazione...</span>'}</div>
+            </div>
+        </div>
+        """
 
     card_html = f"""
     <div class="ai-card ai-card-{theme['class']}">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
             <div class="ai-header">
                 <span style="font-size: 1.5rem;">{theme['icon']}</span>
-                <span>{ai_name}</span>
+                <span>{html.escape(ai_name)}</span>
             </div>
             <div style="display: flex; gap: 0.5rem; align-items: center;">
                 <span class="ai-confidence {conf_class}">
@@ -1286,33 +1357,22 @@ def render_ai_card(ai_name: str, analysis: dict):
 
         <div class="ai-section">
             <div class="ai-section-title">📋 Sintesi Sinottica</div>
-            <div class="ai-section-content">{summary}</div>
+            <div class="ai-section-content">{summary_html}</div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div class="ai-section">
+            <div class="ai-section" style="margin: 0.75rem 0;">
                 <div class="ai-section-title">🔬 Interpretazione Fisica</div>
-                <div class="ai-section-content">{physics if physics else 'Non disponibile'}</div>
+                <div class="ai-section-content">{physics_html}</div>
             </div>
 
-            <div class="ai-section">
+            <div class="ai-section" style="margin: 0.75rem 0;">
                 <div class="ai-section-title">⚠️ Incertezze e Divergenze</div>
-                <div class="ai-section-content">{uncertainty if uncertainty else 'Non disponibile'}</div>
+                <div class="ai-section-content">{uncertainty_html}</div>
             </div>
         </div>
 
-        {f'''
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div class="ai-section">
-                <div class="ai-section-title">🎯 Pattern Identificati</div>
-                {patterns_html if patterns_html else '<div class="ai-section-content">Nessun pattern specifico</div>'}
-            </div>
-            <div class="ai-section">
-                <div class="ai-section-title">📌 Conclusioni Chiave</div>
-                {findings_html if findings_html else '<div class="ai-section-content">In elaborazione...</div>'}
-            </div>
-        </div>
-        ''' if patterns_html or findings_html else ''}
+        {extra_section}
 
         {warnings_html}
 
@@ -1392,6 +1452,7 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
     best_confidence = 0
     best_summary = ""
     best_uncertainty = ""
+    best_physics = ""
     best_theme = None
 
     if ai_analyses:
@@ -1403,18 +1464,21 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
                     best_ai = ai_name
                     best_summary = analysis.get('summary', '')
                     best_uncertainty = analysis.get('uncertainty', '')
+                    best_physics = analysis.get('physics', '')
                     best_theme = get_ai_theme(ai_name)
 
     if best_ai:
         confidence = best_confidence
         verdict = best_summary
         uncertainty = best_uncertainty
-        source = f"Basato su {best_ai}"
+        physics = best_physics
+        source = f"Analisi piu accreditata: {best_ai} ({confidence:.0f}% confidenza)"
     elif ensemble_results is not None and hour in ensemble_results:
         result = ensemble_results[hour]
         confidence = result.final_confidence_score
         verdict = result.synoptic_summary if result.synoptic_summary else "Analisi ensemble dei modelli NWP completata."
         uncertainty = ""
+        physics = ""
         source = "Basato sui modelli NWP"
         best_theme = {'icon': '🌐', 'color': '#667eea'}
     else:
@@ -1423,8 +1487,14 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
         ECMWF e ICON mostrano la soluzione più probabile (65% probabilità).
         Scenario alternativo (35%): GFS con passaggio anticipato di 6-12h e intensità maggiore."""
         uncertainty = ""
+        physics = ""
         source = "Modalità demo"
         best_theme = {'icon': '🎯', 'color': '#667eea'}
+
+    # Convert content to safe HTML
+    verdict_content = markdown_to_html(verdict)
+    uncertainty_content = markdown_to_html(uncertainty) if uncertainty else ""
+    physics_content = markdown_to_html(physics) if physics else ""
 
     # Confidence styling
     if confidence >= 80:
@@ -1451,8 +1521,29 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
             warnings_html = "<div style='margin-top: 1rem; padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px;'>"
             warnings_html += "<div style='color: #f87171; font-weight: 600; margin-bottom: 0.5rem;'>⚠️ Avvertenze</div>"
             for w in result.warnings:
-                warnings_html += f"<div style='color: #fca5a5;'>• {w}</div>"
+                safe_w = html.escape(str(w))
+                warnings_html += f"<div style='color: #fca5a5;'>• {safe_w}</div>"
             warnings_html += "</div>"
+
+    # Build physics section if available
+    physics_section = ""
+    if physics_content:
+        physics_section = f"""
+        <div class="ai-section" style="margin-top: 1rem;">
+            <div class="ai-section-title">🔬 Interpretazione Fisica</div>
+            <div class="ai-section-content">{physics_content}</div>
+        </div>
+        """
+
+    # Build uncertainty section if available
+    uncertainty_section = ""
+    if uncertainty_content:
+        uncertainty_section = f"""
+        <div class="ai-section" style="margin-top: 1rem;">
+            <div class="ai-section-title">⚠️ Incertezze Residue</div>
+            <div class="ai-section-content">{uncertainty_content}</div>
+        </div>
+        """
 
     verdict_html = f"""
     <div class="verdict-card">
@@ -1460,7 +1551,7 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
             <div style="font-size: 2.5rem;">{best_theme['icon'] if best_theme else '🎯'}</div>
             <div>
                 <div class="verdict-title">Verdetto Finale Ensemble</div>
-                <div style="color: #a0a0a0; font-size: 0.9rem;">{source}</div>
+                <div style="color: #a0a0a0; font-size: 0.9rem;">{html.escape(source)}</div>
             </div>
         </div>
 
@@ -1488,15 +1579,12 @@ def render_ensemble_verdict(ensemble_results, hour: int, ai_analyses: dict = Non
             <div>
                 <div class="ai-section" style="margin: 0;">
                     <div class="ai-section-title">📋 Sintesi Finale</div>
-                    <div class="ai-section-content" style="font-size: 1rem;">{verdict}</div>
+                    <div class="ai-section-content" style="font-size: 1rem;">{verdict_content}</div>
                 </div>
 
-                {f'''
-                <div class="ai-section" style="margin-top: 1rem;">
-                    <div class="ai-section-title">⚠️ Incertezze Residue</div>
-                    <div class="ai-section-content">{uncertainty}</div>
-                </div>
-                ''' if uncertainty else ''}
+                {physics_section}
+
+                {uncertainty_section}
 
                 {warnings_html}
             </div>
