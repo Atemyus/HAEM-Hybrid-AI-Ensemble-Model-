@@ -166,7 +166,7 @@ class AIProviderConfig(BaseModel):
     api_key: Optional[str] = Field(default=None, description="API key (if required)")
     base_url: Optional[str] = Field(default=None, description="Custom API endpoint")
     temperature: float = Field(default=0.3, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=4096, ge=100, le=100000)
+    max_tokens: int = Field(default=8192, ge=100, le=100000)  # Increased for complete responses
     enabled: bool = Field(default=True)
 
     # Weight in ensemble

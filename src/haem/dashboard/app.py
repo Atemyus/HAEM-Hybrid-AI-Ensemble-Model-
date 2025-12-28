@@ -728,7 +728,7 @@ def compute_ensemble(model_data: dict, forecast_hour: int):
 # ============================================================================
 
 # Cache version - increment this to invalidate old cached data
-AI_CACHE_VERSION = 6
+AI_CACHE_VERSION = 7
 
 
 def init_session_state():
