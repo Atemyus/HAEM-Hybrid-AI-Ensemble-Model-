@@ -667,6 +667,219 @@ async def run_ai_analysis(model_data: dict, ai_configs: list[AIProviderConfig], 
     return ai_analyses
 
 
+async def chat_with_ai(
+    user_message: str,
+    ai_analyses: dict,
+    model_data: dict,
+    current_hour: int,
+    current_field: str,
+    current_preset: str
+) -> tuple[str, str]:
+    """
+    Send a chat message to the AI with highest confidence.
+
+    Returns:
+        tuple: (ai_name, response_text)
+    """
+    import os
+    from openai import OpenAI
+
+    # Find the AI with highest confidence
+    best_ai = None
+    best_confidence = 0
+    best_analysis = None
+
+    for ai_name, analysis in ai_analyses.items():
+        if isinstance(analysis, dict):
+            conf = analysis.get('confidence', 0)
+            summary = analysis.get('summary', '')
+            # Skip error responses
+            if 'Errore:' in str(summary) or 'Error' in str(summary):
+                continue
+            if conf > best_confidence:
+                best_confidence = conf
+                best_ai = ai_name
+                best_analysis = analysis
+
+    if not best_ai or not best_analysis:
+        return "Sistema", "Non è disponibile un'analisi AI valida. Esegui prima un'analisi."
+
+    # Build context from current analysis
+    context = f"""Sei {best_ai}, un meteorologo esperto. Hai appena completato un'analisi meteorologica con confidenza {best_confidence}%.
+
+CONTESTO DELL'ANALISI CORRENTE:
+- Campo analizzato: {current_field.upper()}
+- Ora di previsione: +{current_hour}h
+- Preset: {current_preset}
+
+LA TUA ANALISI PRECEDENTE:
+📋 SINTESI: {best_analysis.get('summary', 'N/A')}
+
+🔬 INTERPRETAZIONE FISICA: {best_analysis.get('physics', 'N/A')}
+
+⚠️ INCERTEZZE: {best_analysis.get('uncertainty', 'N/A')}
+
+📊 PATTERN IDENTIFICATI: {', '.join(best_analysis.get('patterns', [])) if best_analysis.get('patterns') else 'N/A'}
+
+✅ CONCLUSIONI: {', '.join(best_analysis.get('findings', [])) if best_analysis.get('findings') else 'N/A'}
+
+---
+
+L'utente ha una domanda sulla tua analisi. Rispondi in modo chiaro, dettagliato e comprensibile sia per esperti che per appassionati alle prime armi. Se l'utente chiede qualcosa che non è nel contesto, usa la tua conoscenza meteorologica per rispondere.
+"""
+
+    try:
+        api_key = os.getenv("AIML_API_KEY")
+        if not api_key:
+            return best_ai, "Errore: API key non configurata. Configura AIML_API_KEY."
+
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.aimlapi.com/v1",
+        )
+
+        # Determine which model to use based on best_ai name
+        model_map = {
+            "Claude 4.5 Opus": "claude-opus-4-5",
+            "GPT-5 Pro": "gpt-5.2-chat-latest",
+            "Gemini 3 Pro": "gemini-2.5-pro",
+            "Qwen Max": "qwen-max",
+            "Deepseek V3.2": "deepseek/deepseek-thinking-v3.2-exp",
+            "GLM 4.7": "glm-4.7",
+            "Grok 4.1 Fast": "grok-4-1-fast-reasoning",
+        }
+        model_id = model_map.get(best_ai, "gpt-5.2-chat-latest")
+
+        response = client.chat.completions.create(
+            model=model_id,
+            max_tokens=4096,
+            temperature=0.4,
+            messages=[
+                {"role": "system", "content": context},
+                {"role": "user", "content": user_message},
+            ],
+        )
+
+        return best_ai, response.choices[0].message.content
+
+    except Exception as e:
+        return best_ai, f"Errore nella risposta: {str(e)}"
+
+
+def render_chat_interface(ai_analyses: dict, model_data: dict, current_hour: int, current_field: str, current_preset: str):
+    """Render the AI chat interface."""
+
+    # Find best AI for display
+    best_ai = None
+    best_confidence = 0
+    for ai_name, analysis in ai_analyses.items():
+        if isinstance(analysis, dict):
+            conf = analysis.get('confidence', 0)
+            summary = analysis.get('summary', '')
+            if 'Errore:' not in str(summary) and conf > best_confidence:
+                best_confidence = conf
+                best_ai = ai_name
+
+    # Chat header
+    st.markdown("""
+    <h2 style="color: #e0e0e0; display: flex; align-items: center; gap: 0.5rem;">
+        <span style="font-size: 1.5rem;">💬</span>
+        Chat con l'AI Meteorologo
+    </h2>
+    """, unsafe_allow_html=True)
+
+    if best_ai:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); border-radius: 10px;
+                    padding: 12px; margin-bottom: 15px; border-left: 4px solid #4ade80;">
+            <span style="color: #4ade80; font-weight: bold;">🎯 Risponde: {best_ai}</span>
+            <span style="color: #a0a0a0; margin-left: 10px;">({best_confidence:.0f}% confidenza)</span>
+            <br><span style="color: #888; font-size: 0.9em;">
+                Chiedi chiarimenti sull'analisi di {current_field.upper()} a +{current_hour}h
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info("🤖 Esegui prima un'analisi AI per attivare la chat")
+        return
+
+    # Display chat history
+    chat_container = st.container()
+    with chat_container:
+        for msg in st.session_state.chat_messages:
+            if msg["role"] == "user":
+                st.markdown(f"""
+                <div style="background: #2d3748; border-radius: 10px; padding: 10px 15px;
+                            margin: 5px 0; margin-left: 20%;">
+                    <span style="color: #60a5fa; font-weight: bold;">🧑 Tu:</span><br>
+                    <span style="color: #e0e0e0;">{msg["content"]}</span>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                ai_name = msg.get("ai_name", "AI")
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #1e3a5f, #1a472a); border-radius: 10px;
+                            padding: 10px 15px; margin: 5px 0; margin-right: 20%;">
+                    <span style="color: #4ade80; font-weight: bold;">🤖 {ai_name}:</span><br>
+                    <span style="color: #e0e0e0;">{msg["content"]}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # Chat input
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        user_input = st.text_input(
+            "Scrivi la tua domanda...",
+            key="chat_input",
+            placeholder="Es: Perché i modelli divergono sul timing? Cosa significa questo pattern?",
+            label_visibility="collapsed"
+        )
+    with col2:
+        send_button = st.button("📤 Invia", use_container_width=True)
+
+    # Handle send
+    if send_button and user_input.strip():
+        # Add user message
+        st.session_state.chat_messages.append({
+            "role": "user",
+            "content": user_input
+        })
+
+        # Get AI response
+        with st.spinner(f"💭 {best_ai} sta pensando..."):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                ai_name, response = loop.run_until_complete(
+                    chat_with_ai(
+                        user_input,
+                        ai_analyses,
+                        model_data,
+                        current_hour,
+                        current_field,
+                        current_preset
+                    )
+                )
+                st.session_state.chat_messages.append({
+                    "role": "assistant",
+                    "ai_name": ai_name,
+                    "content": response
+                })
+            finally:
+                loop.close()
+
+        # Force rerun to show new messages
+        st.rerun()
+
+    # Clear chat button
+    if st.session_state.chat_messages:
+        if st.button("🗑️ Cancella cronologia chat", use_container_width=True):
+            st.session_state.chat_messages = []
+            st.rerun()
+
+
 def compute_ensemble(model_data: dict, forecast_hour: int):
     """Compute ensemble mean and spread from model data."""
     # Uses module-level EnsembleField and EnsembleResult classes
@@ -759,6 +972,11 @@ def init_session_state():
         st.session_state.auto_refresh = False
     if 'last_ai_preset' not in st.session_state:
         st.session_state.last_ai_preset = None
+    # Chat state
+    if 'chat_messages' not in st.session_state:
+        st.session_state.chat_messages = []
+    if 'chat_expanded' not in st.session_state:
+        st.session_state.chat_expanded = False
 
 
 def get_ai_cache_key(hour: int, field: str, preset: str) -> str:
@@ -1949,6 +2167,17 @@ def main():
 
     # Ensemble Verdict (now uses AI analyses for best verdict, also filtered)
     render_ensemble_verdict(st.session_state.ensemble_results, current_hour, st.session_state.ai_analyses, config['ai_configs'])
+
+    st.markdown("---")
+
+    # AI Chat Interface
+    render_chat_interface(
+        st.session_state.ai_analyses,
+        st.session_state.model_data,
+        current_hour,
+        st.session_state.selected_field,
+        config['field_preset']
+    )
 
     # Footer
     st.markdown("---")
