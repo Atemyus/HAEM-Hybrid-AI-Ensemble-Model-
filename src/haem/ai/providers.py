@@ -262,10 +262,18 @@ class BaseAIAnalyzer(ABC):
         if preset_context:
             preset_instructions = f"\n**CONTESTO ANALISI**: {preset_context}\n"
 
-        prompt = f"""Sei un meteorologo sinottico esperto che scrive per un pubblico misto: sia appassionati meteo alle prime armi sia professionisti del settore. Il tuo compito è fornire un'analisi COMPLETA, ACCURATA e COMPRENSIBILE.
+        prompt = f"""Sei un meteorologo sinottico esperto ITALIANO che scrive per un pubblico italiano. Il tuo compito è fornire un'analisi COMPLETA, ACCURATA e COMPRENSIBILE focalizzata esclusivamente sull'ITALIA.
+
+## 🇮🇹 FOCUS GEOGRAFICO: ITALIA
+**IMPORTANTE**: L'analisi deve SEMPRE riferirsi all'Italia e alle sue regioni.
+- Quando descrivi fenomeni, specifica SEMPRE l'impatto sull'Italia (Nord, Centro, Sud, Isole)
+- Puoi citare altri paesi europei SOLO per spiegare l'origine dei fenomeni (es. "aria fredda dalla Russia", "perturbazione atlantica dalla Francia")
+- Ogni conclusione deve indicare cosa accadrà IN ITALIA
+- Usa riferimenti geografici italiani: Alpi, Appennini, Pianura Padana, coste tirreniche/adriatiche, Sicilia, Sardegna
 
 {preset_instructions}
 ## Dati Analizzati
+- **Area di interesse**: ITALIA e regioni limitrofe
 - **Campo Selezionato**: {selected_field.upper()} - {field_description}
 - **Ora di Previsione**: +{forecast_hour}h
 - **Modelli Disponibili**: {', '.join(model_data.keys()) if isinstance(model_data, dict) else 'ECMWF, GFS, ICON, GEM, ARPEGE'}
@@ -278,34 +286,35 @@ class BaseAIAnalyzer(ABC):
 
 ## REGOLE FONDAMENTALI (OBBLIGATORIE):
 
-1. **OGNI SEZIONE DEVE CONTENERE ALMENO 4-6 FRASI COMPLETE** - Mai risposte brevi o incomplete
-2. **NON SCRIVERE MAI "Non disponibile" o "Dati insufficienti"** - Anche se i dati sono limitati, fornisci comunque un'analisi ragionata basandoti sulla tua conoscenza meteorologica
-3. **USA UN LINGUAGGIO ACCESSIBILE** - Spiega i termini tecnici tra parentesi quando li usi per la prima volta
-4. **SPIEGA IL "PERCHÉ"** - Non limitarti a descrivere cosa succede, spiega sempre i meccanismi causali
+1. **FOCUS ITALIA** - Ogni affermazione deve riferirsi all'impatto sull'Italia
+2. **OGNI SEZIONE DEVE CONTENERE ALMENO 4-6 FRASI COMPLETE** - Mai risposte brevi o incomplete
+3. **NON SCRIVERE MAI "Non disponibile" o "Dati insufficienti"** - Fornisci sempre un'analisi ragionata
+4. **USA UN LINGUAGGIO ACCESSIBILE** - Spiega i termini tecnici tra parentesi
+5. **SPIEGA IL "PERCHÉ"** - Non limitarti a descrivere cosa succede, spiega i meccanismi causali
 
 ---
 
-### SEZIONE 1: SINTESI SINOTTICA (minimo 5-6 frasi)
+### SEZIONE 1: SINTESI SINOTTICA PER L'ITALIA (minimo 5-6 frasi)
 
-Descrivi la situazione meteorologica a +{forecast_hour}h in modo chiaro e completo:
+Descrivi la situazione meteorologica a +{forecast_hour}h **con focus sull'Italia**:
 
-- **Centri d'azione**: Dove si trovano gli anticicloni (alta pressione) e i cicloni (bassa pressione)? Quanto sono intensi?
-- **Campo di {selected_field.upper()}**: Come appare la distribuzione del campo? Ci sono gradienti (variazioni) significativi?
-- **Flusso atmosferico**: Da dove soffia il vento in quota? È un flusso zonale (ovest-est) o meridiano (nord-sud)?
-- **Evoluzione**: Come cambierà la situazione nelle ore successive?
+- **Centri d'azione e Italia**: Dove si trovano anticicloni e cicloni rispetto all'Italia? Come la influenzano?
+- **Campo di {selected_field.upper()} sull'Italia**: Come appare il campo sulla penisola italiana? Ci sono gradienti significativi?
+- **Flusso atmosferico sull'Italia**: Da dove arriva il flusso? Quali regioni italiane sono più esposte?
+- **Evoluzione per l'Italia**: Come cambierà la situazione sulle diverse aree italiane?
 
-Scrivi in modo che anche un lettore non esperto possa capire la situazione generale, mentre un esperto trovi informazioni tecniche utili.
+Specifica sempre le regioni italiane coinvolte (Nord-Ovest, Nord-Est, Centro, Sud, Isole).
 
 ---
 
 ### SEZIONE 2: INTERPRETAZIONE FISICA (minimo 5-6 frasi)
 
-Spiega i PROCESSI FISICI che stanno causando questa configurazione atmosferica:
+Spiega i PROCESSI FISICI che determinano il tempo **sull'Italia**:
 
-- **Dinamica delle onde**: Le ondulazioni del flusso (onde di Rossby) stanno amplificandosi o smorzandosi? Perché?
-- **Processi energetici**: C'è conversione di energia potenziale in cinetica (ciclogenesi)? Dove e perché?
-- **Avvezione termica**: Aria calda o fredda si sta muovendo verso la nostra area? Quali effetti produce?
-- **Interazioni verticali**: Come interagisce il flusso in quota con quello al suolo? Ci sono forzanti dinamiche?
+- **Dinamica delle onde**: Come le onde di Rossby influenzano il tempo italiano?
+- **Processi energetici**: Ci sono ciclogenesi che interesseranno l'Italia?
+- **Avvezione termica**: Aria calda o fredda sta raggiungendo l'Italia? Da dove proviene?
+- **Interazioni orografiche**: Come interagiscono i flussi con Alpi e Appennini?
 
 IMPORTANTE: Anche se il campo selezionato ({selected_field.upper()}) è "semplice", esistono SEMPRE processi fisici in atto. Descrivili. Se la situazione è stabile (es. anticiclone), spiega perché è stabile e cosa mantiene tale stabilità.
 
@@ -313,69 +322,70 @@ IMPORTANTE: Anche se il campo selezionato ({selected_field.upper()}) è "semplic
 
 ### SEZIONE 3: INCERTEZZE E DIVERGENZE TRA I MODELLI (minimo 5-6 frasi)
 
-Analizza criticamente l'accordo tra i modelli meteorologici:
+Analizza l'accordo tra i modelli **per quanto riguarda l'Italia**:
 
-- **Grado di accordo**: I modelli (ECMWF, GFS, ICON, GEM, ARPEGE) concordano sulla situazione generale? Dove e quanto?
-- **Divergenze specifiche**: Su quali aspetti i modelli differiscono? (timing, posizione, intensità dei fenomeni)
-- **Scenari alternativi**: Se i modelli divergono, quali sono i possibili scenari? Stima le probabilità.
-- **Affidabilità a +{forecast_hour}h**: A questa scadenza temporale, quanto è affidabile la previsione?
+- **Grado di accordo sull'Italia**: I modelli concordano su cosa accadrà in Italia? Su quali regioni c'è più accordo/disaccordo?
+- **Divergenze per l'Italia**: I modelli divergono sul timing o l'intensità dei fenomeni che interesseranno l'Italia?
+- **Scenari alternativi per l'Italia**: Se i modelli divergono, quali sono i possibili scenari per le regioni italiane?
+- **Affidabilità per l'Italia a +{forecast_hour}h**: Quanto è affidabile la previsione per l'Italia a questa scadenza?
 
-IMPORTANTE: Non scrivere mai solo "I modelli concordano" senza dettagli. Anche quando concordano, specifica SU COSA concordano e se ci sono piccole differenze. Se mancano dati espliciti sui singoli modelli, ragiona su come tipicamente si comportano i modelli in situazioni simili.
-
----
-
-### SEZIONE 4: PATTERN IDENTIFICATI (minimo 4-5 elementi)
-
-Elenca e DESCRIVI i pattern meteorologici presenti, spiegando cosa significano:
-
-Formato richiesto (usa esattamente questo formato con il trattino):
-- [Nome pattern]: [Descrizione dettagliata di posizione, intensità, e implicazioni meteo]
-
-Esempi di pattern da cercare:
-- Saccature atlantiche (avvallamenti del flusso)
-- Promontori anticiclonici (espansioni di alta pressione)
-- Cut-off/gocce fredde (vortici isolati)
-- Configurazioni di blocco (pattern che bloccano il flusso zonale)
-- Posizione del jet stream
-- Fronti (caldi, freddi, occlusi)
-
-IMPORTANTE: Identifica SEMPRE almeno 3-4 pattern. Anche in situazioni "tranquille" ci sono pattern: un anticiclone stazionario È un pattern. Un flusso zonale indisturbato È un pattern. Descrivilo.
+IMPORTANTE: Specifica sempre quali REGIONI ITALIANE sono più soggette a incertezza.
 
 ---
 
-### SEZIONE 5: CONCLUSIONI CHIAVE (minimo 4-5 punti)
+### SEZIONE 4: PATTERN IDENTIFICATI E IMPATTO SULL'ITALIA (minimo 4-5 elementi)
 
-Riassumi le conclusioni operative più importanti:
+Elenca i pattern e spiega **come influenzeranno l'Italia**:
 
 Formato richiesto:
-- [Conclusione 1]: [Spiegazione pratica]
-- [Conclusione 2]: [Spiegazione pratica]
-...
+- [Nome pattern]: [Descrizione + IMPATTO SPECIFICO SULL'ITALIA]
 
-Includi sempre:
-- Cosa aspettarsi nelle prossime ore
-- Livello di certezza della previsione (alta/media/bassa)
-- Eventuali criticità o fenomeni da monitorare
-- Implicazioni pratiche (precipitazioni, vento, temperature attese)
+Esempi con focus Italia:
+- Saccatura atlantica → quali regioni italiane saranno interessate da maltempo?
+- Promontorio anticiclonico → porterà stabilità su tutta Italia o solo alcune zone?
+- Aria fredda dai Balcani → quali regioni italiane orientali saranno colpite?
+- Scirocco → quali conseguenze su coste tirreniche e adriatiche?
+- Foehn alpino → effetti sulla Pianura Padana?
+- Stau appenninico → precipitazioni sui versanti?
+
+IMPORTANTE: Ogni pattern deve essere collegato a un EFFETTO CONCRETO su specifiche aree italiane.
 
 ---
 
-### SEZIONE 6: VALUTAZIONE CONFIDENZA
+### SEZIONE 5: CONCLUSIONI CHIAVE PER L'ITALIA (minimo 4-5 punti)
+
+Riassumi le conclusioni operative **per l'Italia**:
+
+Formato richiesto:
+- [Regione/Area italiana]: [Cosa aspettarsi concretamente]
+
+Includi SEMPRE:
+- **Nord Italia** (Pianura Padana, Alpi, Prealpi): cosa aspettarsi?
+- **Centro Italia** (Toscana, Lazio, Marche, Umbria, Abruzzo): cosa aspettarsi?
+- **Sud Italia** (Campania, Calabria, Puglia, Basilicata): cosa aspettarsi?
+- **Isole** (Sicilia, Sardegna): cosa aspettarsi?
+- Livello di certezza della previsione per l'Italia
+- Eventuali criticità meteo da monitorare (allerte, fenomeni intensi)
+
+---
+
+### SEZIONE 6: VALUTAZIONE CONFIDENZA PER L'ITALIA
 
 **PUNTEGGIO: [numero da 0 a 100]/100**
 
 Giustifica il punteggio considerando:
-- Accordo tra modelli (più concordano, più alta la confidenza)
-- Prevedibilità del pattern (pattern stabili = alta confidenza)
-- Scadenza temporale (+{forecast_hour}h è breve/media/lunga?)
-- Continuità con le corse precedenti
+- Accordo tra modelli sulla previsione per l'Italia
+- Prevedibilità della situazione meteorologica italiana
+- Scadenza temporale (+{forecast_hour}h)
+- Fattori locali italiani (orografia complessa, mari caldi, etc.)
 
 ---
 
-## PROMEMORIA FINALE:
-- OGNI sezione DEVE avere contenuto sostanziale (4-6 frasi minimo)
-- MAI scrivere "Non disponibile", "Dati insufficienti", "In elaborazione"
-- Se non hai dati specifici, usa la tua conoscenza meteorologica per fornire un'analisi ragionata
+## 🇮🇹 PROMEMORIA FINALE - FOCUS ITALIA:
+- OGNI affermazione deve riferirsi all'ITALIA e alle sue regioni
+- Usa riferimenti geografici italiani: Nord-Ovest, Nord-Est, Centro, Sud, Sicilia, Sardegna
+- Menziona Alpi, Appennini, Pianura Padana, mari italiani quando rilevante
+- MAI scrivere "Non disponibile" - fornisci sempre un'analisi per l'Italia
 - Scrivi il PUNTEGGIO nel formato esatto: "PUNTEGGIO: XX/100"
 """
         return prompt
